@@ -36,7 +36,7 @@
     }
   },
   "dependencies": {
-    "@fastnear/borsh-schema": "workspace:*",
+    "@fastnear/borsh-schema": "file:../borsh-schema",
     "@noble/curves": "*",
     "@noble/hashes": "*",
     "base58-js": "*",
