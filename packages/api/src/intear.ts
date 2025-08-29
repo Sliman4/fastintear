@@ -571,6 +571,24 @@ export class WalletAdapter {
       // Step 1: Opening popup
       onPending?.({ step: 'popup_opening', networkId, contractId });
 
+      const hotConnectorOrigin = new Promise<string>((resolve) => {
+        let origin: string | null = null;
+        const interval = setInterval(() => {
+          if (origin) {
+            clearInterval(interval);
+            resolve(origin);
+          }
+        }, 100);
+        const listener = (event: MessageEvent) => {
+          // Could be a wrong origin, but there's no way to know if it's the right one
+          if (event.data.origin) {
+            origin = event.data.origin;
+            window.removeEventListener("message", listener);
+          }
+        };
+        window.addEventListener("message", listener);
+      });
+
       const iframe = document.createElement("iframe");
       iframe.src = `${this.#iframeOriginUrl}/wallet-connector-iframe.html`;
       iframe.style.position = "fixed";
@@ -581,11 +599,28 @@ export class WalletAdapter {
       iframe.style.zIndex = "100000";
       document.body.appendChild(iframe);
 
+      iframe.onload = () => {
+        hotConnectorOrigin.then((origin) => {
+          iframe.contentWindow?.postMessage(
+            {
+              type: "hotConnectorData",
+              origin: origin,
+              // @ts-ignore
+              location: window.selector.location,
+            },
+            "*"
+          );
+        });
+      };
+
+      let result: { accountId: string, accounts: Account[], privateKey: string, publicKey: string } | null = null;
       const listener = async (event: MessageEvent) => {
-        if (event.origin !== new URL(this.#iframeOriginUrl).origin) {
-          return;
-        }
-        if (!event.data || !event.data.type) {
+        if (event.data.status) {
+          // Probably a hot connector result
+          iframe.contentWindow?.postMessage(
+            event.data,
+            "*"
+          );
           return;
         }
 
@@ -611,7 +646,7 @@ export class WalletAdapter {
                   version: "V2",
                 },
               },
-              this.#iframeOriginUrl
+              "*"
             );
             break;
           }
@@ -642,15 +677,22 @@ export class WalletAdapter {
               methodNames: functionCallKeyAdded ? (methodNames ?? []) : [],
               logoutKey: logoutKey,
               networkId: networkId,
-              walletUrl: event.origin,
+              walletUrl: event.data.walletUrl,
               useBridge: useBridge,
             };
+            console.log("dataToSave", dataToSave, "event.data", event.data);
             window.localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
+            result = {
+              accountId: accounts[0].accountId,
+              accounts,
+              privateKey: dataToSave.key,
+              publicKey: publicKeyFromPrivate(dataToSave.key)
+            };
             iframe.contentWindow?.postMessage(
               {
                 type: "close",
               },
-              this.#iframeOriginUrl
+              "*"
             );
 
             const newState = {
@@ -673,12 +715,6 @@ export class WalletAdapter {
               console
             );
 
-            resolve({
-              accountId: accounts[0].accountId,
-              accounts,
-              privateKey: dataToSave.key,
-              publicKey: publicKeyFromPrivate(dataToSave.key)
-            });
             break;
           }
           case "error": {
@@ -708,6 +744,11 @@ export class WalletAdapter {
               onError?.(error);
               reject(new IntearAdapterError(errorMessage));
               break;
+            } else if (result) {
+              resolve(result);
+            } else {
+              console.error("No result and no error");
+              reject(new IntearAdapterError("No result and no error"));
             }
           }
         }
@@ -854,7 +895,6 @@ export class WalletAdapter {
 
     if (savedData.useBridge) {
       return new Promise((resolve, reject) => {
-        const iframe = document.createElement("iframe");
         const wsUrl = this.#logoutBridgeService
           .replace("https://", "wss://")
           .replace("http://", "ws://");
@@ -900,22 +940,18 @@ export class WalletAdapter {
               } else {
                 resolve({ outcomes: data.outcomes });
               }
-              iframe.remove();
             }
           } catch (e) {
             console.error("Error parsing WebSocket message:", e);
             reject(new IntearAdapterError("Error parsing WebSocket message", e));
-            iframe.remove();
           }
         };
         ws.onerror = (error) => {
           console.error("WebSocket error:", error);
           reject(new IntearAdapterError("WebSocket error", error));
-          iframe.remove();
         };
         ws.onclose = () => {
           console.debug("WebSocket closed for send-transactions");
-          iframe.remove();
         };
 
         (async () => {
@@ -930,9 +966,7 @@ export class WalletAdapter {
           const walletAppUrl = `intear://send-transactions?session_id=${sessionId}`;
           console.debug("Opening wallet with URL:", walletAppUrl);
 
-          iframe.style.display = "none";
-          iframe.src = walletAppUrl;
-          document.body.appendChild(iframe);
+          window.open(walletAppUrl);
         })();
       });
     }
@@ -945,7 +979,6 @@ export class WalletAdapter {
 
       let done = false;
       const listener = async (event: MessageEvent) => {
-        if (event.origin !== new URL(savedData.walletUrl ?? this.#iframeOriginUrl).origin) return;
         if (!event.data || !event.data.type) return;
 
         console.debug("Message from send-transactions popup", event.data);
@@ -1008,7 +1041,6 @@ export class WalletAdapter {
 
     if (savedData.useBridge) {
       return new Promise((resolve, reject) => {
-        const iframe = document.createElement("iframe");
         const wsUrl = this.#logoutBridgeService
           .replace("https://", "wss://")
           .replace("http://", "ws://");
@@ -1057,7 +1089,8 @@ export class WalletAdapter {
               if (data.type === "error") {
                 reject(new Error(data.message));
               } else {
-                const signatureData = event.data.signature;
+                console.log(JSON.stringify(data))
+                const signatureData = data.signature;
                 try {
                   resolve({
                     accountId: signatureData.accountId,
@@ -1068,22 +1101,22 @@ export class WalletAdapter {
                   reject(new IntearAdapterError("Failed to process signature from wallet", e));
                 }
               }
-              iframe.remove();
+              
             }
           } catch (e) {
             console.error("Error parsing WebSocket message:", e);
             reject(new IntearAdapterError("Error parsing WebSocket message", e));
-            iframe.remove();
+            
           }
         };
         ws.onerror = (error) => {
           console.error("WebSocket error:", error);
           reject(new IntearAdapterError("WebSocket error", error));
-          iframe.remove();
+          
         };
         ws.onclose = () => {
           console.debug("WebSocket closed for sign-message");
-          iframe.remove();
+          
         };
 
         (async () => {
@@ -1098,9 +1131,7 @@ export class WalletAdapter {
           const walletAppUrl = `intear://sign-message?session_id=${sessionId}`;
           console.debug("Opening wallet with URL:", walletAppUrl);
 
-          iframe.style.display = "none";
-          iframe.src = walletAppUrl;
-          document.body.appendChild(iframe);
+          window.open(walletAppUrl, "_blank");
         })();
       });
     }
@@ -1113,7 +1144,6 @@ export class WalletAdapter {
 
       let done = false;
       const listener = async (event: MessageEvent) => {
-        if (event.origin !== new URL(savedData.walletUrl ?? this.#iframeOriginUrl).origin) return;
         if (!event.data || !event.data.type) return;
 
         console.debug("Message from sign-message popup", event.data);
