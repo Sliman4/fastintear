@@ -590,7 +590,7 @@ export class WalletAdapter {
       });
 
       const iframe = document.createElement("iframe");
-      iframe.src = `${this.#iframeOriginUrl}/wallet-connector-iframe.html`;
+      iframe.src = `${this.#iframeOriginUrl}/hot-wallet-connector-iframe.html`;
       iframe.style.position = "fixed";
       iframe.style.inset = "0";
       iframe.style.width = "100vw";
