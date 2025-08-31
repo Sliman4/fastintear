@@ -966,7 +966,8 @@ export class WalletAdapter {
           const walletAppUrl = `intear://send-transactions?session_id=${sessionId}`;
           console.debug("Opening wallet with URL:", walletAppUrl);
 
-          window.open(walletAppUrl);
+          // @ts-ignore
+          window.selector.openNativeApp(walletAppUrl);
         })();
       });
     }
@@ -1131,7 +1132,8 @@ export class WalletAdapter {
           const walletAppUrl = `intear://sign-message?session_id=${sessionId}`;
           console.debug("Opening wallet with URL:", walletAppUrl);
 
-          window.open(walletAppUrl, "_blank");
+          // @ts-ignore
+          window.selector.openNativeApp(walletAppUrl);
         })();
       });
     }
