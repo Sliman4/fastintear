@@ -8,6 +8,7 @@ import { ed25519 } from "@noble/curves/ed25519";
 import { sha256 } from "@noble/hashes/sha2";
 import type { Account, SignatureResult, WalletTxResult } from "./near";
 import { signOut } from "./near";
+import { base_decode } from "meer-api-js/dist/esm/meer-api-js/src/utils/serialize";
 
 const DEFAULT_WALLET_DOMAIN = "https://wallet.intear.tech";
 const DEFAULT_LOGOUT_BRIDGE_SERVICE = "https://logout-bridge-service.intear.tech";
@@ -1096,28 +1097,35 @@ export class WalletAdapter {
                   resolve({
                     accountId: signatureData.accountId,
                     publicKey: signatureData.publicKey,
-                    signature: signatureData.signature,
+                    signature: btoa(
+                      Array.from(
+                        base_decode(
+                          signatureData.signature.split(":")[1]
+                        ),
+                        (byte) => String.fromCharCode(byte)
+                      ).join("")
+                    ),
                   });
                 } catch (e) {
                   reject(new IntearAdapterError("Failed to process signature from wallet", e));
                 }
               }
-              
+
             }
           } catch (e) {
             console.error("Error parsing WebSocket message:", e);
             reject(new IntearAdapterError("Error parsing WebSocket message", e));
-            
+
           }
         };
         ws.onerror = (error) => {
           console.error("WebSocket error:", error);
           reject(new IntearAdapterError("WebSocket error", error));
-          
+
         };
         ws.onclose = () => {
           console.debug("WebSocket closed for sign-message");
-          
+
         };
 
         (async () => {
@@ -1185,7 +1193,14 @@ export class WalletAdapter {
               resolve({
                 accountId: signatureData.accountId,
                 publicKey: signatureData.publicKey,
-                signature: signatureData.signature,
+                signature: btoa(
+                  Array.from(
+                    base_decode(
+                      signatureData.signature.split(":")[1]
+                    ),
+                    (byte) => String.fromCharCode(byte)
+                  ).join("")
+                ),
               });
             } catch (e) {
               reject(new IntearAdapterError("Failed to process signature from wallet", e));
