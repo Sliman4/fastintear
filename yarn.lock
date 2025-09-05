@@ -201,7 +201,21 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@fastnear/borsh-schema@workspace:*, @fastnear/borsh-schema@workspace:packages/borsh-schema":
+"@fastnear/borsh-schema@file:../borsh-schema::locator=%40fastnear%2Futils%40file%3A..%2Futils%23..%2Futils%3A%3Ahash%3D73e949%26locator%3D%2540fastnear%252Fwallet-adapter-widget%2540workspace%253Apackages%252Fwallet-adapter-widget":
+  version: 0.9.7
+  resolution: "@fastnear/borsh-schema@file:../borsh-schema#../borsh-schema::hash=dd0008&locator=%40fastnear%2Futils%40file%3A..%2Futils%23..%2Futils%3A%3Ahash%3D73e949%26locator%3D%2540fastnear%252Fwallet-adapter-widget%2540workspace%253Apackages%252Fwallet-adapter-widget"
+  checksum: 10c0/a1a9de75c9c5fd9828a2629183a87c604b8995ae8ec8a79d61281749d7792a50a4416bb5a18ea299c23d531a6ba6bf6e49a32861625d8093f0a8bc8009ed8fc1
+  languageName: node
+  linkType: hard
+
+"@fastnear/borsh-schema@file:../borsh-schema::locator=%40fastnear%2Futils%40workspace%3Apackages%2Futils":
+  version: 0.9.7
+  resolution: "@fastnear/borsh-schema@file:../borsh-schema#../borsh-schema::hash=dd0008&locator=%40fastnear%2Futils%40workspace%3Apackages%2Futils"
+  checksum: 10c0/a1a9de75c9c5fd9828a2629183a87c604b8995ae8ec8a79d61281749d7792a50a4416bb5a18ea299c23d531a6ba6bf6e49a32861625d8093f0a8bc8009ed8fc1
+  languageName: node
+  linkType: hard
+
+"@fastnear/borsh-schema@workspace:packages/borsh-schema":
   version: 0.0.0-use.local
   resolution: "@fastnear/borsh-schema@workspace:packages/borsh-schema"
   dependencies:
@@ -229,18 +243,33 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@fastnear/repl@workspace:packages/repl"
   dependencies:
-    fastintear: "workspace:*"
+    fastintear: "file:../api"
     rimraf: "npm:*"
   bin:
     repl: bin/repl.cjs
   languageName: unknown
   linkType: soft
 
-"@fastnear/utils@npm:^0.9.7, @fastnear/utils@workspace:*, @fastnear/utils@workspace:packages/utils":
+"@fastnear/utils@file:../utils::locator=%40fastnear%2Fwallet-adapter-widget%40workspace%3Apackages%2Fwallet-adapter-widget":
+  version: 0.9.7
+  resolution: "@fastnear/utils@file:../utils#../utils::hash=73e949&locator=%40fastnear%2Fwallet-adapter-widget%40workspace%3Apackages%2Fwallet-adapter-widget"
+  dependencies:
+    "@fastnear/borsh-schema": "file:../borsh-schema"
+    "@noble/curves": "npm:*"
+    "@noble/hashes": "npm:*"
+    base58-js: "npm:*"
+    big.js: "npm:*"
+    borsh: "npm:*"
+    js-base64: "npm:*"
+  checksum: 10c0/9d74be5f9edb31fcd8ccca5934b304ff4d763f09b1016364df025d1b0b2d0ce3951d8350c1f386ecdc2aaa78ff7c8648622eb38e4811e339c34ff13fb611f019
+  languageName: node
+  linkType: hard
+
+"@fastnear/utils@npm:^0.9.7, @fastnear/utils@workspace:packages/utils":
   version: 0.0.0-use.local
   resolution: "@fastnear/utils@workspace:packages/utils"
   dependencies:
-    "@fastnear/borsh-schema": "workspace:*"
+    "@fastnear/borsh-schema": "file:../borsh-schema"
     "@noble/curves": "npm:*"
     "@noble/hashes": "npm:*"
     base58-js: "npm:*"
@@ -260,7 +289,7 @@ __metadata:
     "@esbuild-plugins/node-globals-polyfill": "npm:*"
     "@esbuild-plugins/node-modules-polyfill": "npm:*"
     "@fastnear/meteorwallet-sdk": "npm:*"
-    "@fastnear/utils": "workspace:*"
+    "@fastnear/utils": "file:../utils"
     "@here-wallet/core": "npm:*"
     base58-js: "npm:*"
     base64-js: "npm:*"
@@ -1630,7 +1659,21 @@ __metadata:
   languageName: node
   linkType: hard
 
-"fastintear@workspace:*, fastintear@workspace:packages/api":
+"fastintear@file:../api::locator=%40fastnear%2Frepl%40workspace%3Apackages%2Frepl":
+  version: 0.2.4
+  resolution: "fastintear@file:../api#../api::hash=80b04b&locator=%40fastnear%2Frepl%40workspace%3Apackages%2Frepl"
+  dependencies:
+    "@fastnear/utils": "npm:^0.9.7"
+    "@noble/curves": "npm:*"
+    "@noble/hashes": "npm:*"
+    base58-js: "npm:*"
+    big.js: "npm:*"
+    borsh: "npm:*"
+  checksum: 10c0/9bee64668ee945ec47c3c5860d700415396902b984d68fae207e3ae5522a8946c5bac4046981c3936d581863ab464ece5a15f0d4694a3dcb7567c6f84bb1bb19
+  languageName: node
+  linkType: hard
+
+"fastintear@workspace:packages/api":
   version: 0.0.0-use.local
   resolution: "fastintear@workspace:packages/api"
   dependencies:

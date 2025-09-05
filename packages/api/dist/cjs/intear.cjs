@@ -835,7 +835,14 @@ class WalletAdapter {
                   resolve({
                     accountId: signatureData.accountId,
                     publicKey: signatureData.publicKey,
-                    signature: signatureData.signature
+                    signature: btoa(
+                      Array.from(
+                        utils.fromBase58(
+                          signatureData.signature.split(":")[1]
+                        ),
+                        (byte) => String.fromCharCode(byte)
+                      ).join("")
+                    )
                   });
                 } catch (e) {
                   reject(new IntearAdapterError("Failed to process signature from wallet", e));
@@ -913,7 +920,14 @@ class WalletAdapter {
               resolve({
                 accountId: signatureData.accountId,
                 publicKey: signatureData.publicKey,
-                signature: signatureData.signature
+                signature: btoa(
+                  Array.from(
+                    utils.fromBase58(
+                      signatureData.signature.split(":")[1]
+                    ),
+                    (byte) => String.fromCharCode(byte)
+                  ).join("")
+                )
               });
             } catch (e) {
               reject(new IntearAdapterError("Failed to process signature from wallet", e));

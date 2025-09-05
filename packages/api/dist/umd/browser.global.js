@@ -4425,7 +4425,14 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
                     resolve({
                       accountId: signatureData.accountId,
                       publicKey: signatureData.publicKey,
-                      signature: signatureData.signature
+                      signature: btoa(
+                        Array.from(
+                          base58_to_binary_default(
+                            signatureData.signature.split(":")[1]
+                          ),
+                          (byte) => String.fromCharCode(byte)
+                        ).join("")
+                      )
                     });
                   } catch (e) {
                     reject(new IntearAdapterError("Failed to process signature from wallet", e));
@@ -4503,7 +4510,14 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
                 resolve({
                   accountId: signatureData.accountId,
                   publicKey: signatureData.publicKey,
-                  signature: signatureData.signature
+                  signature: btoa(
+                    Array.from(
+                      base58_to_binary_default(
+                        signatureData.signature.split(":")[1]
+                      ),
+                      (byte) => String.fromCharCode(byte)
+                    ).join("")
+                  )
                 });
               } catch (e) {
                 reject(new IntearAdapterError("Failed to process signature from wallet", e));

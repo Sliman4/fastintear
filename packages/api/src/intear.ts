@@ -8,7 +8,6 @@ import { ed25519 } from "@noble/curves/ed25519";
 import { sha256 } from "@noble/hashes/sha2";
 import type { Account, SignatureResult, WalletTxResult } from "./near";
 import { signOut } from "./near";
-import { base_decode } from "meer-api-js/dist/esm/meer-api-js/src/utils/serialize";
 
 const DEFAULT_WALLET_DOMAIN = "https://wallet.intear.tech";
 const DEFAULT_LOGOUT_BRIDGE_SERVICE = "https://logout-bridge-service.intear.tech";
@@ -1099,7 +1098,7 @@ export class WalletAdapter {
                     publicKey: signatureData.publicKey,
                     signature: btoa(
                       Array.from(
-                        base_decode(
+                        fromBase58(
                           signatureData.signature.split(":")[1]
                         ),
                         (byte) => String.fromCharCode(byte)
@@ -1195,7 +1194,7 @@ export class WalletAdapter {
                 publicKey: signatureData.publicKey,
                 signature: btoa(
                   Array.from(
-                    base_decode(
+                    fromBase58(
                       signatureData.signature.split(":")[1]
                     ),
                     (byte) => String.fromCharCode(byte)
