@@ -41,16 +41,16 @@
     }
   },
   "dependencies": {
-    "@fastnear/utils": "^0.9.7",
-    "@noble/curves": "*",
-    "@noble/hashes": "*",
-    "base58-js": "*",
-    "big.js": "*",
-    "borsh": "*"
+    "@fastnear/utils": "0.9.7",
+    "@noble/curves": "2.0.0",
+    "@noble/hashes": "2.0.0",
+    "base58-js": "3.0.3",
+    "big.js": "7.0.1",
+    "borsh": "2.0.0"
   },
   "devDependencies": {
-    "rimraf": "*",
-    "tsup": "*",
-    "typescript": "*"
+    "rimraf": "6.0.1",
+    "tsup": "8.5.0",
+    "typescript": "5.9.2"
   }
 }
