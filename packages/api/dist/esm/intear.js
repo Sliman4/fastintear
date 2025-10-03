@@ -714,11 +714,11 @@ class WalletAdapter {
         })();
       });
     }
+    const popup = window.open(`${savedData.walletUrl ?? this.#iframeOriginUrl}/send-transactions`, "_blank", POPUP_FEATURES);
+    if (!popup) {
+      throw new IntearAdapterError("Popup was blocked");
+    }
     return new Promise(async (resolve, reject) => {
-      const popup = window.open(`${savedData.walletUrl ?? this.#iframeOriginUrl}/send-transactions`, "_blank", POPUP_FEATURES);
-      if (!popup) {
-        return reject(new IntearAdapterError("Popup was blocked"));
-      }
       let done = false;
       const listener = /* @__PURE__ */ __name(async (event) => {
         if (!event.data || !event.data.type) return;
@@ -871,11 +871,11 @@ class WalletAdapter {
         })();
       });
     }
+    const popup = window.open(`${savedData.walletUrl ?? this.#iframeOriginUrl}/sign-message`, "_blank", POPUP_FEATURES);
+    if (!popup) {
+      throw new IntearAdapterError("Popup was blocked");
+    }
     return new Promise(async (resolve, reject) => {
-      const popup = window.open(`${savedData.walletUrl ?? this.#iframeOriginUrl}/sign-message`, "_blank", POPUP_FEATURES);
-      if (!popup) {
-        return reject(new IntearAdapterError("Popup was blocked"));
-      }
       let done = false;
       const listener = /* @__PURE__ */ __name(async (event) => {
         if (!event.data || !event.data.type) return;
