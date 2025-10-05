@@ -39,7 +39,7 @@
   },
   "dependencies": {
     "@fastnear/meteorwallet-sdk": "*",
-    "@fastnear/utils": "file:../utils",
+    "@fastnear/utils": "0.9.7",
     "@here-wallet/core": "*",
     "base58-js": "*",
     "base64-js": "*",
