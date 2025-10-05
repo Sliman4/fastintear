@@ -159,6 +159,7 @@ export interface Transaction {
 
 import * as reExportAllUtils from "@fastnear/utils";
 import { sha256 } from "@noble/hashes/sha2";
+import type { MessageToSign } from "./intear.js";
 
 Big.DP = 27;
 export const MaxBlockDelayMs = 1000 * 60 * 60 * 6; // 6 hours
@@ -307,6 +308,7 @@ export const config = (newConfig?: Partial<NetworkConfig>): NetworkConfig => {
 export interface SignInParams {
   contractId?: string;
   methodNames?: string[];
+  messageToSign?: MessageToSign;
 }
 
 export interface SignInCallbacks {
@@ -362,6 +364,7 @@ export const requestSignIn = async (
         } : undefined,
         timeout,
       },
+      messageToSign: params.messageToSign,
     });
 
     if (result.error) {

@@ -528,6 +528,14 @@ export interface SignInCallbacks {
   timeout?: number;
 }
 
+export type MessageToSign = {
+  message: string,
+  nonce: Buffer,
+  recipient: string,
+  callbackUrl?: string,
+  state?: string,
+};
+
 export class WalletAdapter {
   #iframeOriginUrl: string;
   #logoutBridgeService: string;
@@ -556,13 +564,22 @@ export class WalletAdapter {
     contractId,
     methodNames,
     networkId,
-    callbacks
+    callbacks,
+    messageToSign,
   }: {
     contractId?: string;
     methodNames?: string[];
     networkId: string;
     callbacks?: SignInCallbacks;
-  }): Promise<{ accountId: string, accounts: Account[], privateKey?: string, publicKey?: string, error?: string }> {
+    messageToSign?: MessageToSign;
+  }): Promise<{
+    accountId: string,
+    accounts: Account[],
+    privateKey?: string,
+    publicKey?: string,
+    error?: string,
+    signedMessage?: SignatureResult,
+  }> {
     console.debug("WalletAdapter: signIn", { contractId, methodNames, networkId });
     const { onPending, onError, timeout = 60000 } = callbacks || {};
     const privateKey = privateKeyFromRandom();
@@ -593,7 +610,7 @@ export class WalletAdapter {
         switch (event.data.type) {
           case "ready": {
             const origin = location.origin || "file://local-html-file";
-            const message = JSON.stringify({ origin });
+            const message = JSON.stringify({ origin, messageToSign });
             const nonce = Date.now();
             const signatureString = await generateAuthSignature(privateKey, message, nonce);
             const publicKey = publicKeyFromPrivate(privateKey);
@@ -677,7 +694,8 @@ export class WalletAdapter {
               accountId: accounts[0].accountId,
               accounts,
               privateKey: dataToSave.key,
-              publicKey: publicKeyFromPrivate(dataToSave.key)
+              publicKey: publicKeyFromPrivate(dataToSave.key),
+              signedMessage: event.data.signedMessage,
             });
             break;
           }
@@ -1000,7 +1018,7 @@ export class WalletAdapter {
     });
   }
 
-  async signMessage({ message, nonce, recipient, callbackUrl, state }: { message: string, nonce: Buffer, recipient: string, callbackUrl?: string, state?: string }): Promise<SignatureResult> {
+  async signMessage({ message, nonce, recipient, callbackUrl, state }: MessageToSign): Promise<SignatureResult> {
     console.debug("WalletAdapter: signMessage", { message, nonce, recipient });
     const savedData = assertLoggedIn();
     const privateKey = savedData.key;
