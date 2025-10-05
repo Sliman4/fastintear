@@ -1,126 +1,49 @@
-import {
-  fromBase58,
-  privateKeyFromRandom,
-  publicKeyFromPrivate,
-  signHash
-} from "@fastnear/utils";
-import { ed25519 } from "@noble/curves/ed25519";
-import { sha256 } from "@noble/hashes/sha2";
-import type { Account, SignatureResult, WalletTxResult } from "./near";
-import { signOut } from "./near";
+import { publicKeyFromPrivate, signHash, fromBase58, privateKeyFromRandom } from '@fastnear/utils';
+import { ed25519 } from '@noble/curves/ed25519';
+import { sha256 } from '@noble/hashes/sha2';
+import { signOut } from './near';
 
+/* ⋈ 🏃🏻💨 FastNEAR API - ESM (fastintear version 0.2.4) */
+/* https://www.npmjs.com/package/fastintear/v/0.2.4 */
+var __defProp = Object.defineProperty;
+var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 const DEFAULT_WALLET_DOMAIN = "https://wallet.intear.tech";
 const DEFAULT_LOGOUT_BRIDGE_SERVICE = "https://logout-bridge-service.intear.tech";
 const STORAGE_KEY = "_intear_wallet_connected_account";
 const POPUP_FEATURES = "width=400,height=700";
-
 let hasCheckedLogout = false;
-let checkingAccountPromise: Promise<Account[]> | null = null;
+let checkingAccountPromise = null;
 let sessionVerificationInProgress = false;
-
-interface Transaction {
-  signerId?: string;
-  receiverId: string;
-  actions: Array<any>;
-}
-
-export interface TransactionResult {
-  /** URL to redirect to if needed. */
-  url?: string;
-
-  /** Transaction hash if immediately available. */
-  hash?: string;
-
-  /** Error message if the transaction failed. */
-  error?: string;
-}
-
-export interface WalletAdapterConstructor {
-  walletUrl?: string; // only used for the initial iframe
-  targetOrigin?: string;
-  onStateUpdate?: (state: any) => void;
-  lastState?: any;
-  callbackUrl?: string;
-  logoutBridgeService?: string;
-}
-
-interface SavedData {
-  accounts: Account[];
-  key: string;
-  contractId: string;
-  methodNames: string[];
-  logoutKey: string;
-  networkId: string;
-
-  // the 2 fields below can be undefined if the user has logged in using
-  // an older version of fastintear
-  walletUrl?: string;
-  useBridge?: boolean;
-}
-
 class IntearAdapterError extends Error {
-  constructor(message: string, public cause?: unknown) {
+  constructor(message, cause) {
     super(message);
+    this.cause = cause;
     this.name = "IntearAdapterError";
     if (cause) {
-      this.stack += `\nCaused by: ${cause instanceof Error ? cause.stack : String(cause)
-        }`;
+      this.stack += `
+Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
     }
   }
+  static {
+    __name(this, "IntearAdapterError");
+  }
 }
-
-type WsClientMessage = {
-  Auth: {
-    network: string; // e.g., "mainnet", "testnet"
-    account_id: string;
-    app_public_key: string;
-    nonce: number;
-    signature: string;
-  };
-};
-
-type LogoutInfo = {
-  nonce: number;
-  signature: string;
-  caused_by: "User" | "App";
-};
-
-type WsServerMessage =
-  | { Error: { message: string } }
-  | { Success: { message: string } }
-  | {
-    LoggedOut: {
-      network: string;
-      account_id: string;
-      app_public_key: string;
-      logout_info: LogoutInfo;
-    };
-  };
-
-type SessionStatus = "Active" | { LoggedOut: LogoutInfo };
-
-
 class LogoutWebSocket {
-  private static instance: LogoutWebSocket | null = null;
-  private ws: WebSocket | null = null;
-  private network: string;
-  private accountId: string;
-  private appPrivateKey: string;
-  private userLogoutPublicKey: string;
-  private logoutBridgeServiceUrl: string;
-  private intentionallyClosed = false;
-  private reconnectAttempts = 0;
-  private maxReconnectAttempts = 3;
-  private logger: Console;
-
-  private constructor(
-    network: string,
-    accountId: string,
-    appPrivateKey: string,
-    userLogoutPublicKey: string,
-    logoutBridgeServiceUrl: string,
-    logger: Console
-  ) {
+  static {
+    __name(this, "LogoutWebSocket");
+  }
+  static instance = null;
+  ws = null;
+  network;
+  accountId;
+  appPrivateKey;
+  userLogoutPublicKey;
+  logoutBridgeServiceUrl;
+  intentionallyClosed = false;
+  reconnectAttempts = 0;
+  maxReconnectAttempts = 3;
+  logger;
+  constructor(network, accountId, appPrivateKey, userLogoutPublicKey, logoutBridgeServiceUrl, logger) {
     this.network = network;
     this.accountId = accountId;
     this.appPrivateKey = appPrivateKey;
@@ -129,43 +52,33 @@ class LogoutWebSocket {
     this.logger = logger;
     this.connect();
   }
-
-  private async connect() {
+  async connect() {
     try {
-      const wsUrl = this.logoutBridgeServiceUrl
-        .replace("https://", "wss://")
-        .replace("http://", "ws://");
+      const wsUrl = this.logoutBridgeServiceUrl.replace("https://", "wss://").replace("http://", "ws://");
       this.ws = new WebSocket(`${wsUrl}/api/subscribe`);
-
       this.ws.onopen = async () => {
         if (!this.ws) {
           return;
         }
-
         const nonce = Date.now();
         const messageText = `subscribe|${nonce}`;
         const messageBytes = new TextEncoder().encode(messageText);
-
         const appPublicKeyString = publicKeyFromPrivate(this.appPrivateKey);
-        const signatureBase58 = signHash(messageBytes, this.appPrivateKey, { returnBase58: true }) as string;
+        const signatureBase58 = signHash(messageBytes, this.appPrivateKey, { returnBase58: true });
         const signatureString = `ed25519:${signatureBase58}`;
-
-        const authMessage: WsClientMessage = {
+        const authMessage = {
           Auth: {
             network: this.network,
             account_id: this.accountId,
             app_public_key: appPublicKeyString,
             nonce,
-            signature: signatureString,
-          },
+            signature: signatureString
+          }
         };
-
         this.ws.send(JSON.stringify(authMessage));
       };
-
       this.ws.onmessage = async (event) => {
-        const message = JSON.parse(event.data as string) as WsServerMessage;
-
+        const message = JSON.parse(event.data);
         if ("Success" in message) {
           this.logger.log("LogoutWebSocket:", message.Success.message);
           this.reconnectAttempts = 0;
@@ -175,69 +88,49 @@ class LogoutWebSocket {
         } else if ("LoggedOut" in message) {
           const { logout_info: logoutInfo } = message.LoggedOut;
           this.logger.log("LogoutWebSocket: Received logout notification:", logoutInfo);
-
-          // TODO: verify, 
-          // validateNonce
-          if (
-            logoutInfo.nonce > Date.now() ||
-            logoutInfo.nonce < Date.now() - 1000 * 60 * 5 // 5 minutes tolerance
-          ) {
+          if (logoutInfo.nonce > Date.now() || logoutInfo.nonce < Date.now() - 1e3 * 60 * 5) {
             this.logger.error("LogoutWebSocket: Invalid logout nonce:", logoutInfo.nonce);
             return;
           }
-
           const appPublicKeyString = publicKeyFromPrivate(this.appPrivateKey);
-          const verifyMessageText = `logout|${logoutInfo.nonce}|${this.accountId}|${appPublicKeyString}`; // validateMessage
+          const verifyMessageText = `logout|${logoutInfo.nonce}|${this.accountId}|${appPublicKeyString}`;
           const verifyMessageBytes = new TextEncoder().encode(verifyMessageText);
-
           const sigParts = logoutInfo.signature.split(":");
-          if (sigParts.length !== 2 || (sigParts[0] !== "ed25519" && sigParts[0] !== "secp256k1")) {
+          if (sigParts.length !== 2 || sigParts[0] !== "ed25519" && sigParts[0] !== "secp256k1") {
             this.logger.error("LogoutWebSocket: Invalid signature format:", logoutInfo.signature);
             return;
           }
           const sigData = sigParts[1];
           const signatureBytes = fromBase58(sigData);
-
-          let effectiveVerifyKey: string;
+          let effectiveVerifyKey;
           if (logoutInfo.caused_by === "User") {
             effectiveVerifyKey = this.userLogoutPublicKey;
           } else if (logoutInfo.caused_by === "App") {
-            // No idea how the user can be signed out by the app and the app doesn't
-            // know that, but whatever, handle this anyway
             effectiveVerifyKey = appPublicKeyString;
           } else {
             this.logger.error("LogoutWebSocket: Unknown logout cause:", logoutInfo.caused_by);
             return;
           }
-
-          // Convert effectiveVerifyKey string (e.g., "ed25519:...") to Uint8Array
-          let publicKeyBytes: Uint8Array;
+          let publicKeyBytes;
           const base58PublicKey = effectiveVerifyKey.substring("ed25519:".length);
           publicKeyBytes = fromBase58(base58PublicKey);
-
           const isValid = ed25519.verify(signatureBytes, verifyMessageBytes, publicKeyBytes);
-
           if (!isValid) {
             this.logger.error("LogoutWebSocket: Invalid logout signature");
             return;
           }
-
           this.logger.log(
             "LogoutWebSocket: Valid logout message received. Calling signOut and reloading."
           );
-          // Call the signOut function from near.ts to properly update the application state
           signOut();
           this.intentionallyClosed = true;
           this.close();
           window.location.reload();
         }
       };
-
       this.ws.onclose = () => {
         this.logger.log("LogoutWebSocket: Connection closed.");
-        // If it was intentionally closed, do not attempt to reconnect
         if (this.intentionallyClosed) {
-          // If this instance is the current static instance, nullify it
           if (LogoutWebSocket.instance === this) {
             LogoutWebSocket.instance = null;
           }
@@ -252,7 +145,6 @@ class LogoutWebSocket {
           }
         }
       };
-
       this.ws.onerror = (error) => {
         this.logger.warn("LogoutWebSocket: Error:", error);
         if (!this.intentionallyClosed) {
@@ -272,25 +164,13 @@ class LogoutWebSocket {
       };
     } catch (error) {
       this.logger.warn("LogoutWebSocket: Error creating WebSocket connection:", error);
-      // Don't let WebSocket connection failures break the app
     }
   }
-
-  public static initialize(
-    network: string,
-    accountId: string,
-    appPrivateKey: string,
-    userLogoutPublicKey: string,
-    logoutBridgeServiceUrl: string,
-    logger: Console
-  ): LogoutWebSocket | null {
+  static initialize(network, accountId, appPrivateKey, userLogoutPublicKey, logoutBridgeServiceUrl, logger) {
     try {
       if (LogoutWebSocket.instance) {
-        // If an instance already exists, return it
         return LogoutWebSocket.instance;
       }
-
-      // Create and connect new instance
       LogoutWebSocket.instance = new LogoutWebSocket(
         network,
         accountId,
@@ -299,20 +179,16 @@ class LogoutWebSocket {
         logoutBridgeServiceUrl,
         logger
       );
-
       return LogoutWebSocket.instance;
     } catch (error) {
-      // Catch any unexpected errors during initialization
       logger.warn("LogoutWebSocket: Failed to initialize:", error);
       return null;
     }
   }
-
-  public static getInstance(): LogoutWebSocket | null {
+  static getInstance() {
     return LogoutWebSocket.instance;
   }
-
-  public close() {
+  close() {
     if (this.ws) {
       this.intentionallyClosed = true;
       this.ws.close();
@@ -320,25 +196,16 @@ class LogoutWebSocket {
     LogoutWebSocket.instance = null;
   }
 }
-
-
-async function generateAuthSignature(
-  privateKey: string,
-  data: string,
-  nonce: number
-): Promise<string> {
-  // TODO: replace with near-sign-verify? sign(message, options)
-  const messageToSign = nonce.toString() + "|" + data; // need to append TAG, could break his verify
-  const messageBytes = new TextEncoder().encode(messageToSign); // maybe we should adopt nonce prepended in messages
+async function generateAuthSignature(privateKey, data, nonce) {
+  const messageToSign = nonce.toString() + "|" + data;
+  const messageBytes = new TextEncoder().encode(messageToSign);
   const hashBytes = sha256(messageBytes);
-
-  const signatureBase58 = signHash(hashBytes, privateKey, { returnBase58: true }) as string;
-
+  const signatureBase58 = signHash(hashBytes, privateKey, { returnBase58: true });
   return `ed25519:${signatureBase58}`;
 }
-
-function assertLoggedIn(): SavedData {
-  if (typeof window === 'undefined') {
+__name(generateAuthSignature, "generateAuthSignature");
+function assertLoggedIn() {
+  if (typeof window === "undefined") {
     throw new IntearAdapterError("Cannot access localStorage in this environment.");
   }
   const savedDataStr = window.localStorage.getItem(STORAGE_KEY);
@@ -346,7 +213,7 @@ function assertLoggedIn(): SavedData {
     throw new IntearAdapterError("Not signed in (no data found)");
   }
   try {
-    const savedData = JSON.parse(savedDataStr) as SavedData;
+    const savedData = JSON.parse(savedDataStr);
     if (!savedData || !savedData.accounts || savedData.accounts.length === 0 || !savedData.key) {
       throw new Error("Invalid saved data structure");
     }
@@ -357,42 +224,26 @@ function assertLoggedIn(): SavedData {
     throw new IntearAdapterError("Failed to parse login data, please sign in again.", e);
   }
 }
-
-/**
- * Safely get saved data without throwing
- * @returns SavedData or null if not logged in or error
- */
-function getSavedData(): SavedData | null {
+__name(assertLoggedIn, "assertLoggedIn");
+function getSavedData() {
   try {
     return assertLoggedIn();
   } catch {
     return null;
   }
 }
-
-/**
- * Verify a logout signature from the bridge service
- * @returns true if signature is valid, false otherwise
- */
-function verifyLogoutSignature(
-  logoutInfo: LogoutInfo,
-  accountId: string,
-  appPublicKeyString: string,
-  userLogoutPublicKey: string
-): boolean {
+__name(getSavedData, "getSavedData");
+function verifyLogoutSignature(logoutInfo, accountId, appPublicKeyString, userLogoutPublicKey) {
   try {
     const logoutMessageToVerify = `logout|${logoutInfo.nonce}|${accountId}|${appPublicKeyString}`;
     const sigParts = logoutInfo.signature.split(":");
-
-    if (sigParts.length !== 2 || (sigParts[0] !== "ed25519" && sigParts[0] !== "secp256k1")) {
+    if (sigParts.length !== 2 || sigParts[0] !== "ed25519" && sigParts[0] !== "secp256k1") {
       console.error("WalletAdapter: Invalid signature format:", logoutInfo.signature);
       return false;
     }
-
     const sigData = sigParts[1];
     const signatureToVerify = fromBase58(sigData);
-
-    let verifyKey: string;
+    let verifyKey;
     if (logoutInfo.caused_by === "User") {
       verifyKey = userLogoutPublicKey;
     } else if (logoutInfo.caused_by === "App") {
@@ -401,10 +252,8 @@ function verifyLogoutSignature(
       console.error("WalletAdapter: Unknown logout cause:", logoutInfo.caused_by);
       return false;
     }
-
     const base58PublicKey = verifyKey.substring("ed25519:".length);
     const publicKeyBytes = fromBase58(base58PublicKey);
-
     return ed25519.verify(
       signatureToVerify,
       new TextEncoder().encode(logoutMessageToVerify),
@@ -415,23 +264,13 @@ function verifyLogoutSignature(
     return false;
   }
 }
-
-/**
- * Verify session status with the bridge service
- * @returns Object with session status and accounts
- */
-async function verifySessionStatus(
-  savedData: SavedData,
-  logoutBridgeService: string,
-  onStateUpdate?: (state: any) => void
-): Promise<{ isActive: boolean; accounts: Account[] }> {
+__name(verifyLogoutSignature, "verifyLogoutSignature");
+async function verifySessionStatus(savedData, logoutBridgeService, onStateUpdate) {
   try {
     const account = savedData.accounts[0];
     const networkId = savedData.networkId;
     const appPrivateKey = savedData.key;
     const appPublicKeyString = publicKeyFromPrivate(appPrivateKey);
-
-    // Initialize WebSocket for real-time logout notifications
     LogoutWebSocket.initialize(
       networkId,
       account.accountId,
@@ -440,14 +279,11 @@ async function verifySessionStatus(
       logoutBridgeService,
       console
     );
-
-    // Check current session status
     const nonce = Date.now();
     const checkMessage = `check|${nonce}`;
     const messageBytes = new TextEncoder().encode(checkMessage);
-    const signatureBase58 = signHash(messageBytes, appPrivateKey, { returnBase58: true }) as string;
+    const signatureBase58 = signHash(messageBytes, appPrivateKey, { returnBase58: true });
     const signatureString = `ed25519:${signatureBase58}`;
-
     const response = await fetch(
       `${logoutBridgeService}/api/check_logout/${networkId}/${account.accountId}/${appPublicKeyString}`,
       {
@@ -456,39 +292,30 @@ async function verifySessionStatus(
           "Content-Type": "application/json",
           "Accept": "application/json"
         },
-        body: JSON.stringify({ nonce, signature: signatureString }),
+        body: JSON.stringify({ nonce, signature: signatureString })
       }
     );
-
     if (!response.ok) {
       console.warn("WalletAdapter: Failed to check logout status:", await response.text());
-      return { isActive: true, accounts: savedData.accounts }; // Assume active if we can't check
+      return { isActive: true, accounts: savedData.accounts };
     }
-
-    const status = (await response.json()) as SessionStatus;
+    const status = await response.json();
     console.debug("WalletAdapter: Logout check response:", status);
-
     if (status === "Active") {
       return { isActive: true, accounts: savedData.accounts };
     } else {
-      // Handle logout case
-      const logoutInfo = (status as { LoggedOut: LogoutInfo }).LoggedOut;
+      const logoutInfo = status.LoggedOut;
       console.debug("WalletAdapter: User was logged out:", logoutInfo);
-
-      // Verify the logout signature
       const isValid = verifyLogoutSignature(
         logoutInfo,
         account.accountId,
         appPublicKeyString,
         savedData.logoutKey
       );
-
       if (!isValid) {
         console.error("WalletAdapter: Invalid logout signature");
-        return { isActive: true, accounts: savedData.accounts }; // Treat as active if signature invalid
+        return { isActive: true, accounts: savedData.accounts };
       }
-
-      // Clear storage if signature is valid
       console.debug("WalletAdapter: Valid remote logout. Clearing local session.");
       window.localStorage.removeItem(STORAGE_KEY);
       LogoutWebSocket.getInstance()?.close();
@@ -497,97 +324,47 @@ async function verifySessionStatus(
     }
   } catch (error) {
     console.error("WalletAdapter: Error verifying session status:", error);
-    return { isActive: true, accounts: savedData.accounts }; // Assume active on error
+    return { isActive: true, accounts: savedData.accounts };
   }
 }
-
-export type SignInStep = 'popup_opening' | 'waiting_for_user' | 'processing_result';
-
-export type SignInErrorType =
-  | 'user_cancelled'
-  | 'wallet_error'
-  | 'network_error'
-  | 'unknown';
-
-export type SuggestedAction =
-  | 'retry'
-  | 'contact_support';
-
-export type SignInError = {
-  type: SignInErrorType;
-  message: string;
-  retryable: boolean;
-  suggestedAction: SuggestedAction;
-  originalError?: any;
-  timestamp: number;
-}
-
-export interface SignInCallbacks {
-  onPending?: (context: { step: SignInStep; networkId: string; contractId?: string }) => void;
-  onError?: (error: SignInError) => void;
-  timeout?: number;
-}
-
-export type MessageToSign = {
-  message: string,
-  nonce: Buffer,
-  recipient: string,
-  callbackUrl?: string,
-  state?: string,
-};
-
-export class WalletAdapter {
-  #iframeOriginUrl: string;
-  #logoutBridgeService: string;
-  #onStateUpdate?: (state: any) => void;
-
+__name(verifySessionStatus, "verifySessionStatus");
+class WalletAdapter {
+  static {
+    __name(this, "WalletAdapter");
+  }
+  #iframeOriginUrl;
+  #logoutBridgeService;
+  #onStateUpdate;
   constructor({
     walletUrl: iframeOriginUrl = DEFAULT_WALLET_DOMAIN,
     targetOrigin,
     onStateUpdate,
     lastState,
     callbackUrl,
-    logoutBridgeService = DEFAULT_LOGOUT_BRIDGE_SERVICE,
-  }: WalletAdapterConstructor) {
+    logoutBridgeService = DEFAULT_LOGOUT_BRIDGE_SERVICE
+  }) {
     this.#iframeOriginUrl = iframeOriginUrl;
     this.#logoutBridgeService = logoutBridgeService;
     this.#onStateUpdate = onStateUpdate;
     console.debug("Intear Popup WalletAdapter initialized. URL:", this.#iframeOriginUrl);
-    if (typeof window !== 'undefined') {
-      this.initializeSession().catch(err => {
+    if (typeof window !== "undefined") {
+      this.initializeSession().catch((err) => {
         console.error("Error during initial session initialization:", err);
       });
     }
   }
-
   async signIn({
     contractId,
     methodNames,
     networkId,
     callbacks,
-    messageToSign,
-  }: {
-    contractId?: string;
-    methodNames?: string[];
-    networkId: string;
-    callbacks?: SignInCallbacks;
-    messageToSign?: MessageToSign;
-  }): Promise<{
-    accountId: string,
-    accounts: Account[],
-    privateKey?: string,
-    publicKey?: string,
-    error?: string,
-    signedMessage?: SignatureResult,
-  }> {
+    messageToSign
+  }) {
     console.debug("WalletAdapter: signIn", { contractId, methodNames, networkId });
-    const { onPending, onError, timeout = 60000 } = callbacks || {};
+    const { onPending, onError, timeout = 6e4 } = callbacks || {};
     const privateKey = privateKeyFromRandom();
-
     return new Promise((resolve, reject) => {
-      // Step 1: Opening popup
-      onPending?.({ step: 'popup_opening', networkId, contractId });
-
+      onPending?.({ step: "popup_opening", networkId, contractId });
       const iframe = document.createElement("iframe");
       iframe.src = `${this.#iframeOriginUrl}/wallet-connector-iframe.html`;
       iframe.style.position = "fixed";
@@ -597,15 +374,13 @@ export class WalletAdapter {
       iframe.style.border = "none";
       iframe.style.zIndex = "100000";
       document.body.appendChild(iframe);
-
-      const listener = async (event: MessageEvent) => {
+      const listener = /* @__PURE__ */ __name(async (event) => {
         if (event.origin !== new URL(this.#iframeOriginUrl).origin) {
           return;
         }
         if (!event.data || !event.data.type) {
           return;
         }
-
         console.debug("Message from connect popup", event.data);
         switch (event.data.type) {
           case "ready": {
@@ -618,58 +393,54 @@ export class WalletAdapter {
               {
                 type: "signIn",
                 data: {
-                  contractId: contractId,
-                  methodNames: methodNames,
-                  publicKey: publicKey,
-                  networkId: networkId,
+                  contractId,
+                  methodNames,
+                  publicKey,
+                  networkId,
                   nonce,
                   message,
                   signature: signatureString,
-                  version: "V2",
-                },
+                  version: "V2"
+                }
               },
               this.#iframeOriginUrl
             );
             break;
           }
           case "connected": {
-            // Step 3: Processing result
-            onPending?.({ step: 'processing_result', networkId, contractId });
-
-            const accounts = event.data.accounts as Account[];
+            onPending?.({ step: "processing_result", networkId, contractId });
+            const accounts = event.data.accounts;
             if (!accounts || accounts.length === 0) {
               const error = {
-                type: 'wallet_error' as SignInErrorType,
-                message: 'No accounts returned from wallet',
+                type: "wallet_error",
+                message: "No accounts returned from wallet",
                 retryable: true,
-                suggestedAction: 'retry' as SuggestedAction,
-                timestamp: Date.now(),
+                suggestedAction: "retry",
+                timestamp: Date.now()
               };
               onError?.(error);
               return reject(new IntearAdapterError("No accounts returned from wallet"));
             }
             const functionCallKeyAdded = event.data.functionCallKeyAdded;
             const logoutKey = event.data.logoutKey;
-
             const useBridge = event.data.useBridge;
-            const dataToSave: SavedData = {
+            const dataToSave = {
               accounts,
               key: privateKey,
               contractId: functionCallKeyAdded && contractId ? contractId : "",
-              methodNames: functionCallKeyAdded ? (methodNames ?? []) : [],
-              logoutKey: logoutKey,
-              networkId: networkId,
-              walletUrl: event.data.walletUrl,
-              useBridge: useBridge,
+              methodNames: functionCallKeyAdded ? methodNames ?? [] : [],
+              logoutKey,
+              networkId,
+              walletUrl: event.origin,
+              useBridge
             };
             window.localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
             iframe.contentWindow?.postMessage(
               {
-                type: "close",
+                type: "close"
               },
               this.#iframeOriginUrl
             );
-
             const newState = {
               accountId: accounts[0].accountId,
               networkId,
@@ -677,21 +448,18 @@ export class WalletAdapter {
               publicKey: publicKeyFromPrivate(dataToSave.key)
             };
             this.#onStateUpdate?.(newState);
-
-            // Ensure any old WebSocket instance is closed before initializing a new one
             LogoutWebSocket.getInstance()?.close();
-
             LogoutWebSocket.initialize(
               dataToSave.networkId,
               dataToSave.accounts[0].accountId,
-              dataToSave.key, // App's LAK private key (this is the appPrivateKey for WS)
-              dataToSave.logoutKey, // User's main logout public key from wallet
+              dataToSave.key,
+              // App's LAK private key (this is the appPrivateKey for WS)
+              dataToSave.logoutKey,
+              // User's main logout public key from wallet
               this.#logoutBridgeService,
               console
             );
-
             console.log("eventdata", event.data);
-
             resolve({
               accountId: accounts[0].accountId,
               accounts,
@@ -706,9 +474,9 @@ export class WalletAdapter {
                       event.data.signedMessage.signature.split(":")[1]
                     ),
                     (byte) => String.fromCharCode(byte)
-                  ).join(""),
+                  ).join("")
                 )
-              } : undefined,
+              } : void 0
             });
             break;
           }
@@ -717,7 +485,7 @@ export class WalletAdapter {
             iframe.contentWindow?.postMessage(
               {
                 type: "close",
-                message: event.data.message,
+                message: event.data.message
               },
               this.#iframeOriginUrl
             );
@@ -729,12 +497,12 @@ export class WalletAdapter {
             if (event.data.message) {
               const errorMessage = event.data.message || "Unknown error from wallet popup";
               const error = {
-                type: 'wallet_error' as SignInErrorType,
+                type: "wallet_error",
                 message: errorMessage,
                 retryable: true,
-                suggestedAction: 'contact_support' as SuggestedAction,
+                suggestedAction: "contact_support",
                 originalError: event.data,
-                timestamp: Date.now(),
+                timestamp: Date.now()
               };
               onError?.(error);
               reject(new IntearAdapterError(errorMessage));
@@ -742,20 +510,15 @@ export class WalletAdapter {
             }
           }
         }
-      };
+      }, "listener");
       window.addEventListener("message", listener);
-
-      // Step 2: Waiting for user
-      onPending?.({ step: 'waiting_for_user', networkId, contractId });
+      onPending?.({ step: "waiting_for_user", networkId, contractId });
     });
   }
-
-  async signOut(): Promise<void> {
+  async signOut() {
     console.debug("WalletAdapter: signOut");
     const savedData = getSavedData();
-
     LogoutWebSocket.getInstance()?.close();
-
     if (savedData) {
       try {
         const accountId = savedData.accounts[0].accountId;
@@ -763,13 +526,11 @@ export class WalletAdapter {
         const appPublicKeyString = publicKeyFromPrivate(appPrivateKey);
         const networkId = savedData.networkId;
         const nonce = Date.now();
-
         const messageText = `logout|${nonce}|${accountId}|${appPublicKeyString}`;
         const messageBytes = new TextEncoder().encode(messageText);
         const hashBytes = sha256(messageBytes);
-        const signatureBase58 = signHash(hashBytes, appPrivateKey, { returnBase58: true }) as string;
+        const signatureBase58 = signHash(hashBytes, appPrivateKey, { returnBase58: true });
         const signatureString = `ed25519:${signatureBase58}`;
-
         const response = await fetch(`${this.#logoutBridgeService}/api/logout_app/${networkId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -777,8 +538,8 @@ export class WalletAdapter {
             account_id: accountId,
             app_public_key: appPublicKeyString,
             nonce,
-            signature: signatureString,
-          }),
+            signature: signatureString
+          })
         });
         if (!response.ok) {
           console.error("WalletAdapter: Failed to notify bridge service of logout:", await response.text());
@@ -789,32 +550,22 @@ export class WalletAdapter {
         console.error("WalletAdapter: Error during bridge service logout notification:", e);
       }
     }
-
     window.localStorage.removeItem(STORAGE_KEY);
     this.#onStateUpdate?.({ accountId: null, networkId: null, publicKey: null });
   }
-
   // Initialize the session by checking if the user is logged in and setting up WebSocket connection
-  async initializeSession(): Promise<void> {
-    // Prevent multiple simultaneous session verifications
+  async initializeSession() {
     if (sessionVerificationInProgress) {
       return;
     }
-
     sessionVerificationInProgress = true;
-
     try {
       const savedData = getSavedData();
-
       if (!savedData) {
-        // Not signed in, this is normal for new users
         LogoutWebSocket.getInstance()?.close();
         return;
       }
-
-      // Use the shared session verification function
       await verifySessionStatus(savedData, this.#logoutBridgeService, this.#onStateUpdate);
-
     } catch (e) {
       console.error("WalletAdapter: Unexpected error during session initialization:", e);
       LogoutWebSocket.getInstance()?.close();
@@ -822,73 +573,56 @@ export class WalletAdapter {
       sessionVerificationInProgress = false;
     }
   }
-
-
-  getState(): { accountId: string | null; networkId: string | null; publicKey?: string | null } {
+  getState() {
     const savedData = getSavedData();
-
     if (savedData) {
       return {
         accountId: savedData.accounts[0].accountId,
         networkId: savedData.networkId,
-        publicKey: publicKeyFromPrivate(savedData.key),
+        publicKey: publicKeyFromPrivate(savedData.key)
       };
     }
-
     return { accountId: null, networkId: null, publicKey: null };
   }
-
-  setState(state: any): void {
-    // console.warn("WalletAdapter: setState called, but state is primarily managed in localStorage for this adapter.");
+  setState(state) {
     this.#onStateUpdate?.(state);
   }
-
-  async getAccounts(): Promise<Account[]> {
+  async getAccounts() {
     console.debug("WalletAdapter: getAccounts");
     const savedData = getSavedData();
-
     if (!savedData) {
       return [];
     }
-
     if (!hasCheckedLogout) {
       if (checkingAccountPromise) {
         return await checkingAccountPromise;
       }
-
-      checkingAccountPromise = new Promise<Array<Account>>(async (resolve) => {
+      checkingAccountPromise = new Promise(async (resolve) => {
         try {
-          // Use the shared session verification function
           const result = await verifySessionStatus(savedData, this.#logoutBridgeService, this.#onStateUpdate);
           resolve(result.accounts);
         } catch (error) {
           console.error("WalletAdapter: Error in getAccounts:", error);
-          resolve(savedData.accounts); // Return accounts on error
+          resolve(savedData.accounts);
         }
       }).finally(() => {
         checkingAccountPromise = null;
         hasCheckedLogout = true;
       });
-
       return await checkingAccountPromise;
     }
-
     console.debug("WalletAdapter: Accounts:", savedData.accounts);
     return savedData.accounts;
   }
-
-  async sendTransactions({ transactions }: { transactions: Transaction[] }): Promise<WalletTxResult> {
+  async sendTransactions({ transactions }) {
     console.debug("WalletAdapter: sendTransactions", { transactions });
-    const savedData = assertLoggedIn(); // Throws if not logged in
+    const savedData = assertLoggedIn();
     const privateKey = savedData.key;
     const accountId = savedData.accounts[0].accountId;
-
     if (savedData.useBridge) {
       return new Promise((resolve, reject) => {
         const iframe = document.createElement("iframe");
-        const wsUrl = this.#logoutBridgeService
-          .replace("https://", "wss://")
-          .replace("http://", "ws://");
+        const wsUrl = this.#logoutBridgeService.replace("https://", "wss://").replace("http://", "ws://");
         const ws = new WebSocket(`${wsUrl}/api/session/create`);
         ws.onopen = async () => {
           console.debug("WebSocket connected for transactions");
@@ -907,12 +641,12 @@ export class WalletAdapter {
                 accountId: savedData.accounts[0].accountId,
                 publicKey: publicKeyFromPrivate(savedData.key),
                 nonce: authNonce,
-                signature: signatureString,
-              },
+                signature: signatureString
+              }
             })
           );
         };
-        let currentSessionId: string | null = null;
+        let currentSessionId = null;
         ws.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
@@ -948,7 +682,6 @@ export class WalletAdapter {
           console.debug("WebSocket closed for send-transactions");
           iframe.remove();
         };
-
         (async () => {
           const sessionId = await new Promise((resolveSessionId) => {
             setInterval(() => {
@@ -957,28 +690,23 @@ export class WalletAdapter {
               }
             }, 100);
           });
-
           const walletAppUrl = `intear://send-transactions?session_id=${sessionId}`;
           console.debug("Opening wallet with URL:", walletAppUrl);
-
           iframe.style.display = "none";
           iframe.src = walletAppUrl;
           document.body.appendChild(iframe);
         })();
       });
     }
-
     return new Promise(async (resolve, reject) => {
       const popup = window.open(`${savedData.walletUrl ?? this.#iframeOriginUrl}/send-transactions`, "_blank", POPUP_FEATURES);
       if (!popup) {
         return reject(new IntearAdapterError("Popup was blocked"));
       }
-
       let done = false;
-      const listener = async (event: MessageEvent) => {
+      const listener = /* @__PURE__ */ __name(async (event) => {
         if (event.origin !== new URL(savedData.walletUrl ?? this.#iframeOriginUrl).origin) return;
         if (!event.data || !event.data.type) return;
-
         console.debug("Message from send-transactions popup", event.data);
         switch (event.data.type) {
           case "ready": {
@@ -991,11 +719,11 @@ export class WalletAdapter {
                 type: "signAndSendTransactions",
                 data: {
                   transactions: transactionsString,
-                  accountId: accountId,
-                  publicKey: publicKey,
-                  nonce: nonce,
-                  signature: signatureString,
-                },
+                  accountId,
+                  publicKey,
+                  nonce,
+                  signature: signatureString
+                }
               },
               savedData.walletUrl ?? this.#iframeOriginUrl
             );
@@ -1016,8 +744,7 @@ export class WalletAdapter {
             break;
           }
         }
-      };
-
+      }, "listener");
       window.addEventListener("message", listener);
       const checkPopupClosed = setInterval(() => {
         if (popup.closed) {
@@ -1030,19 +757,15 @@ export class WalletAdapter {
       }, 100);
     });
   }
-
-  async signMessage({ message, nonce, recipient, callbackUrl, state }: MessageToSign): Promise<SignatureResult> {
+  async signMessage({ message, nonce, recipient, callbackUrl, state }) {
     console.debug("WalletAdapter: signMessage", { message, nonce, recipient });
     const savedData = assertLoggedIn();
     const privateKey = savedData.key;
     const accountId = savedData.accounts[0].accountId;
-
     if (savedData.useBridge) {
       return new Promise((resolve, reject) => {
         const iframe = document.createElement("iframe");
-        const wsUrl = this.#logoutBridgeService
-          .replace("https://", "wss://")
-          .replace("http://", "ws://");
+        const wsUrl = this.#logoutBridgeService.replace("https://", "wss://").replace("http://", "ws://");
         const ws = new WebSocket(`${wsUrl}/api/session/create`);
         ws.onopen = async () => {
           console.debug("WebSocket connected for sign-message");
@@ -1051,7 +774,7 @@ export class WalletAdapter {
             recipient,
             nonce: Array.from(nonce),
             callbackUrl,
-            state,
+            state
           });
           const authNonce = Date.now();
           const signatureString = await generateAuthSignature(
@@ -1067,12 +790,12 @@ export class WalletAdapter {
                 accountId: savedData.accounts[0].accountId,
                 publicKey: publicKeyFromPrivate(privateKey),
                 nonce: authNonce,
-                signature: signatureString,
-              },
+                signature: signatureString
+              }
             })
           );
         };
-        let currentSessionId: string | null = null;
+        let currentSessionId = null;
         ws.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
@@ -1123,7 +846,6 @@ export class WalletAdapter {
           console.debug("WebSocket closed for sign-message");
           iframe.remove();
         };
-
         (async () => {
           const sessionId = await new Promise((resolveSessionId) => {
             setInterval(() => {
@@ -1132,28 +854,23 @@ export class WalletAdapter {
               }
             }, 100);
           });
-
           const walletAppUrl = `intear://sign-message?session_id=${sessionId}`;
           console.debug("Opening wallet with URL:", walletAppUrl);
-
           iframe.style.display = "none";
           iframe.src = walletAppUrl;
           document.body.appendChild(iframe);
         })();
       });
     }
-
     return new Promise(async (resolve, reject) => {
       const popup = window.open(`${savedData.walletUrl ?? this.#iframeOriginUrl}/sign-message`, "_blank", POPUP_FEATURES);
       if (!popup) {
         return reject(new IntearAdapterError("Popup was blocked"));
       }
-
       let done = false;
-      const listener = async (event: MessageEvent) => {
+      const listener = /* @__PURE__ */ __name(async (event) => {
         if (event.origin !== new URL(savedData.walletUrl ?? this.#iframeOriginUrl).origin) return;
         if (!event.data || !event.data.type) return;
-
         console.debug("Message from sign-message popup", event.data);
         switch (event.data.type) {
           case "ready": {
@@ -1162,7 +879,7 @@ export class WalletAdapter {
               recipient,
               nonce: Array.from(nonce),
               callbackUrl,
-              state,
+              state
             });
             const authNonce = Date.now();
             const signatureString = await generateAuthSignature(privateKey, signMessageString, authNonce);
@@ -1172,11 +889,11 @@ export class WalletAdapter {
                 type: "signMessage",
                 data: {
                   message: signMessageString,
-                  accountId: accountId,
-                  publicKey: publicKey,
+                  accountId,
+                  publicKey,
                   nonce: authNonce,
-                  signature: signatureString,
-                },
+                  signature: signatureString
+                }
               },
               savedData.walletUrl ?? this.#iframeOriginUrl
             );
@@ -1191,7 +908,7 @@ export class WalletAdapter {
               resolve({
                 accountId: signatureData.accountId,
                 publicKey: signatureData.publicKey,
-                signature: signatureData.signature,
+                signature: signatureData.signature
               });
             } catch (e) {
               reject(new IntearAdapterError("Failed to process signature from wallet", e));
@@ -1206,8 +923,7 @@ export class WalletAdapter {
             break;
           }
         }
-      };
-
+      }, "listener");
       window.addEventListener("message", listener);
       const checkPopupClosed = setInterval(() => {
         if (popup.closed) {
@@ -1220,10 +936,12 @@ export class WalletAdapter {
       }, 100);
     });
   }
-
   destroy() {
     console.debug("Intear Popup WalletAdapter destroyed.");
   }
 }
+var intear_default = WalletAdapter;
 
-export default WalletAdapter;
+export { WalletAdapter, intear_default as default };
+//# sourceMappingURL=intear.js.map
+//# sourceMappingURL=intear.js.map

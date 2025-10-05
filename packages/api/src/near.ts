@@ -404,6 +404,7 @@ export const requestSignIn = async (
         methodNames,
         accounts: result.accounts || [{ accountId: result.accountId, publicKey: result.publicKey }],
         isReconnection,
+        signedMessage: result.signedMessage,
       };
 
       onSuccess?.(successResult);
