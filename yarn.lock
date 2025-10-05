@@ -201,7 +201,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@fastnear/borsh-schema@workspace:*, @fastnear/borsh-schema@workspace:packages/borsh-schema":
+"@fastnear/borsh-schema@file:../borsh-schema::locator=%40fastnear%2Futils%40workspace%3Apackages%2Futils":
+  version: 0.9.7
+  resolution: "@fastnear/borsh-schema@file:../borsh-schema#../borsh-schema::hash=dd0008&locator=%40fastnear%2Futils%40workspace%3Apackages%2Futils"
+  checksum: 10c0/a1a9de75c9c5fd9828a2629183a87c604b8995ae8ec8a79d61281749d7792a50a4416bb5a18ea299c23d531a6ba6bf6e49a32861625d8093f0a8bc8009ed8fc1
+  languageName: node
+  linkType: hard
+
+"@fastnear/borsh-schema@workspace:packages/borsh-schema":
   version: 0.0.0-use.local
   resolution: "@fastnear/borsh-schema@workspace:packages/borsh-schema"
   dependencies:
@@ -229,18 +236,18 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@fastnear/repl@workspace:packages/repl"
   dependencies:
-    fastintear: "workspace:*"
+    fastintear: "file:../api"
     rimraf: "npm:*"
   bin:
     repl: bin/repl.cjs
   languageName: unknown
   linkType: soft
 
-"@fastnear/utils@npm:^0.9.7, @fastnear/utils@workspace:*, @fastnear/utils@workspace:packages/utils":
+"@fastnear/utils@npm:0.9.7, @fastnear/utils@npm:^0.9.7, @fastnear/utils@workspace:packages/utils":
   version: 0.0.0-use.local
   resolution: "@fastnear/utils@workspace:packages/utils"
   dependencies:
-    "@fastnear/borsh-schema": "workspace:*"
+    "@fastnear/borsh-schema": "file:../borsh-schema"
     "@noble/curves": "npm:*"
     "@noble/hashes": "npm:*"
     base58-js: "npm:*"
@@ -260,7 +267,7 @@ __metadata:
     "@esbuild-plugins/node-globals-polyfill": "npm:*"
     "@esbuild-plugins/node-modules-polyfill": "npm:*"
     "@fastnear/meteorwallet-sdk": "npm:*"
-    "@fastnear/utils": "workspace:*"
+    "@fastnear/utils": "npm:0.9.7"
     "@here-wallet/core": "npm:*"
     base58-js: "npm:*"
     base64-js: "npm:*"
@@ -1630,7 +1637,21 @@ __metadata:
   languageName: node
   linkType: hard
 
-"fastintear@workspace:*, fastintear@workspace:packages/api":
+"fastintear@file:../api::locator=%40fastnear%2Frepl%40workspace%3Apackages%2Frepl":
+  version: 0.3.0
+  resolution: "fastintear@file:../api#../api::hash=e78606&locator=%40fastnear%2Frepl%40workspace%3Apackages%2Frepl"
+  dependencies:
+    "@fastnear/utils": "npm:^0.9.7"
+    "@noble/curves": "npm:*"
+    "@noble/hashes": "npm:*"
+    base58-js: "npm:*"
+    big.js: "npm:*"
+    borsh: "npm:*"
+  checksum: 10c0/0175d17e71568bb718f8986c3eee99f9bbc158f8b256a2b37238b3952b8c9850c9fc6405a1c90fccf4f6d4d725631b0cdf4642ed960adfe1d45a0f0bdfad7751
+  languageName: node
+  linkType: hard
+
+"fastintear@workspace:packages/api":
   version: 0.0.0-use.local
   resolution: "fastintear@workspace:packages/api"
   dependencies:
