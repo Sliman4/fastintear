@@ -1,10 +1,9 @@
 'use strict';
 
 var utils = require('@fastnear/utils');
-var intear = require('./intear');
 
-/* ⋈ 🏃🏻💨 FastNEAR API - CJS (fastintear version 0.2.4) */
-/* https://www.npmjs.com/package/fastintear/v/0.2.4 */
+/* ⋈ 🏃🏻💨 FastNEAR API - CJS (fastintear version 0.3.0) */
+/* https://www.npmjs.com/package/fastintear/v/0.3.0 */
 var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 const WIDGET_URL = "https://wallet.intear.tech";
@@ -19,159 +18,275 @@ const NETWORKS = {
     nodeUrl: "https://rpc.mainnet.fastnear.com/"
   }
 };
-exports._config = utils.lsGet("config") || {
-  ...NETWORKS[DEFAULT_NETWORK_ID]
-};
-exports._state = utils.lsGet("state") || {};
-const onAdapterStateUpdate = /* @__PURE__ */ __name((state) => {
-  const { accountId, lastWalletId, privateKey } = state;
-  const newAccountId = accountId || null;
-  if (newAccountId !== exports._state.accountId) {
-    update({
-      accountId: newAccountId,
-      lastWalletId: lastWalletId || void 0,
-      ...privateKey ? { privateKey } : {}
-    });
+class LocalStorageStateManager {
+  constructor(networkId = DEFAULT_NETWORK_ID) {
+    this.networkId = networkId;
+    this.loadInitialState();
   }
-}, "onAdapterStateUpdate");
-const getWalletAdapterState = /* @__PURE__ */ __name(() => {
-  return {
-    publicKey: exports._state.publicKey,
-    accountId: exports._state.accountId,
-    lastWalletId: exports._state.lastWalletId,
-    networkId: exports._config.networkId
-  };
-}, "getWalletAdapterState");
-let _adapter = new intear.WalletAdapter({
-  onStateUpdate: onAdapterStateUpdate,
-  walletUrl: WIDGET_URL
-});
-try {
-  exports._state.publicKey = exports._state.privateKey ? utils.publicKeyFromPrivate(exports._state.privateKey) : null;
-} catch (e) {
-  console.error("Error parsing private key:", e);
-  exports._state.privateKey = null;
-  utils.lsSet("nonce", null);
-}
-exports._txHistory = utils.lsGet("txHistory") || {};
-const _unbroadcastedEvents = {
-  account: [],
-  tx: []
-};
-const events = {
-  _eventListeners: {
-    account: /* @__PURE__ */ new Set(),
-    tx: /* @__PURE__ */ new Set()
-  },
-  notifyAccountListeners: /* @__PURE__ */ __name((accountId) => {
-    if (events._eventListeners.account.size === 0) {
-      _unbroadcastedEvents.account.push(accountId);
-      return;
+  static {
+    __name(this, "LocalStorageStateManager");
+  }
+  subscribers = /* @__PURE__ */ new Set();
+  currentState = null;
+  loadInitialState() {
+    try {
+      const savedState = utils.lsGet("walletState");
+      if (savedState && savedState.networkId === this.networkId) {
+        if (savedState.privateKey && !savedState.publicKey) {
+          savedState.publicKey = utils.publicKeyFromPrivate(savedState.privateKey);
+        }
+        this.currentState = savedState;
+      }
+    } catch (e) {
+      console.error("Error loading initial state:", e);
+      this.currentState = null;
     }
-    events._eventListeners.account.forEach((callback) => {
+  }
+  async getState() {
+    return this.currentState;
+  }
+  async setState(state) {
+    if (state.privateKey && !state.publicKey) {
+      state.publicKey = utils.publicKeyFromPrivate(state.privateKey);
+    }
+    this.currentState = state;
+    utils.lsSet("walletState", state);
+    if (state.privateKey !== this.currentState?.privateKey) {
+      utils.lsSet("nonce", null);
+    }
+    this.notifySubscribers(state);
+  }
+  async clearState() {
+    const clearedState = {
+      accountId: null,
+      publicKey: null,
+      privateKey: null,
+      networkId: this.networkId,
+      lastWalletId: null,
+      accessKeyContractId: null
+    };
+    this.currentState = clearedState;
+    utils.lsSet("walletState", null);
+    utils.lsSet("nonce", null);
+    utils.lsSet("block", null);
+    this.notifySubscribers(clearedState);
+  }
+  subscribe(callback) {
+    this.subscribers.add(callback);
+    if (this.currentState) {
+      callback(this.currentState);
+    }
+    return () => {
+      this.subscribers.delete(callback);
+    };
+  }
+  notifySubscribers(state) {
+    this.subscribers.forEach((callback) => {
       try {
-        callback(accountId);
+        callback(state);
       } catch (e) {
-        console.error(e);
+        console.error("Error in state subscriber:", e);
       }
     });
-  }, "notifyAccountListeners"),
-  notifyTxListeners: /* @__PURE__ */ __name((tx) => {
-    if (events._eventListeners.tx.size === 0) {
-      _unbroadcastedEvents.tx.push(tx);
-      return;
+  }
+}
+class MemoryStateManager {
+  constructor(networkId = DEFAULT_NETWORK_ID) {
+    this.networkId = networkId;
+    this.currentState = {
+      accountId: null,
+      publicKey: null,
+      privateKey: null,
+      networkId: this.networkId,
+      lastWalletId: null,
+      accessKeyContractId: null
+    };
+  }
+  static {
+    __name(this, "MemoryStateManager");
+  }
+  subscribers = /* @__PURE__ */ new Set();
+  currentState = null;
+  async getState() {
+    return this.currentState;
+  }
+  async setState(state) {
+    if (state.privateKey && !state.publicKey) {
+      state.publicKey = utils.publicKeyFromPrivate(state.privateKey);
     }
-    events._eventListeners.tx.forEach((callback) => {
+    this.currentState = state;
+    this.notifySubscribers(state);
+  }
+  async clearState() {
+    const clearedState = {
+      accountId: null,
+      publicKey: null,
+      privateKey: null,
+      networkId: this.networkId,
+      lastWalletId: null,
+      accessKeyContractId: null
+    };
+    this.currentState = clearedState;
+    this.notifySubscribers(clearedState);
+  }
+  subscribe(callback) {
+    this.subscribers.add(callback);
+    if (this.currentState) {
+      callback(this.currentState);
+    }
+    return () => {
+      this.subscribers.delete(callback);
+    };
+  }
+  notifySubscribers(state) {
+    this.subscribers.forEach((callback) => {
+      try {
+        callback(state);
+      } catch (e) {
+        console.error("Error in state subscriber:", e);
+      }
+    });
+  }
+}
+class ExternalStateManagerWrapper {
+  constructor(externalManager) {
+    this.externalManager = externalManager;
+    this.loadInitialState();
+  }
+  static {
+    __name(this, "ExternalStateManagerWrapper");
+  }
+  subscribers = /* @__PURE__ */ new Set();
+  currentState = null;
+  async loadInitialState() {
+    try {
+      this.currentState = await this.externalManager.getState();
+    } catch (e) {
+      console.error("Error loading external state:", e);
+      this.currentState = null;
+    }
+  }
+  async getState() {
+    try {
+      this.currentState = await this.externalManager.getState();
+      return this.currentState;
+    } catch (e) {
+      console.error("Error getting external state:", e);
+      return this.currentState;
+    }
+  }
+  async setState(state) {
+    try {
+      if (state.privateKey && !state.publicKey) {
+        state.publicKey = utils.publicKeyFromPrivate(state.privateKey);
+      }
+      await this.externalManager.setState(state);
+      this.currentState = state;
+      this.notifySubscribers(state);
+    } catch (e) {
+      console.error("Error setting external state:", e);
+      throw e;
+    }
+  }
+  async clearState() {
+    try {
+      await this.externalManager.clearState();
+      this.currentState = null;
+      this.subscribers.forEach((callback) => {
+        try {
+          callback({
+            accountId: null,
+            publicKey: null,
+            privateKey: null,
+            networkId: this.currentState?.networkId || DEFAULT_NETWORK_ID,
+            lastWalletId: null,
+            accessKeyContractId: null
+          });
+        } catch (e) {
+          console.error("Error in state subscriber:", e);
+        }
+      });
+    } catch (e) {
+      console.error("Error clearing external state:", e);
+      throw e;
+    }
+  }
+  subscribe(callback) {
+    this.subscribers.add(callback);
+    if (this.currentState) {
+      callback(this.currentState);
+    }
+    return () => {
+      this.subscribers.delete(callback);
+    };
+  }
+  notifySubscribers(state) {
+    this.subscribers.forEach((callback) => {
+      try {
+        callback(state);
+      } catch (e) {
+        console.error("Error in state subscriber:", e);
+      }
+    });
+  }
+}
+class TxHistoryManager {
+  static {
+    __name(this, "TxHistoryManager");
+  }
+  txHistory = {};
+  subscribers = /* @__PURE__ */ new Set();
+  constructor() {
+    this.loadHistory();
+  }
+  loadHistory() {
+    try {
+      this.txHistory = utils.lsGet("txHistory") || {};
+    } catch (e) {
+      console.error("Error loading transaction history:", e);
+      this.txHistory = {};
+    }
+  }
+  updateTx(txStatus) {
+    const txId = txStatus.txId;
+    this.txHistory[txId] = {
+      ...this.txHistory[txId] || {},
+      ...txStatus,
+      updateTimestamp: Date.now()
+    };
+    utils.lsSet("txHistory", this.txHistory);
+    this.notifySubscribers(this.txHistory[txId]);
+  }
+  getHistory() {
+    return this.txHistory;
+  }
+  clearHistory() {
+    this.txHistory = {};
+    utils.lsSet("txHistory", {});
+  }
+  subscribe(callback) {
+    this.subscribers.add(callback);
+    return () => {
+      this.subscribers.delete(callback);
+    };
+  }
+  notifySubscribers(tx) {
+    this.subscribers.forEach((callback) => {
       try {
         callback(tx);
       } catch (e) {
-        console.error(e);
+        console.error("Error in tx subscriber:", e);
       }
     });
-  }, "notifyTxListeners"),
-  onAccount: /* @__PURE__ */ __name((callback) => {
-    events._eventListeners.account.add(callback);
-    if (_unbroadcastedEvents.account.length > 0) {
-      const accountEvent = _unbroadcastedEvents.account;
-      _unbroadcastedEvents.account = [];
-      accountEvent.forEach(events.notifyAccountListeners);
-    }
-    return callback;
-  }, "onAccount"),
-  onTx: /* @__PURE__ */ __name((callback) => {
-    events._eventListeners.tx.add(callback);
-    if (_unbroadcastedEvents.tx.length > 0) {
-      const txEvent = _unbroadcastedEvents.tx;
-      _unbroadcastedEvents.tx = [];
-      txEvent.forEach(events.notifyTxListeners);
-    }
-    return callback;
-  }, "onTx"),
-  offAccount: /* @__PURE__ */ __name((callback) => {
-    events._eventListeners.account.delete(callback);
-  }, "offAccount"),
-  offTx: /* @__PURE__ */ __name((callback) => {
-    events._eventListeners.tx.delete(callback);
-  }, "offTx")
-};
-const update = /* @__PURE__ */ __name((newState) => {
-  const oldState = exports._state;
-  exports._state = { ...exports._state, ...newState };
-  utils.lsSet("state", {
-    accountId: exports._state.accountId,
-    privateKey: exports._state.privateKey,
-    lastWalletId: exports._state.lastWalletId,
-    accessKeyContractId: exports._state.accessKeyContractId
-  });
-  if (newState.hasOwnProperty("privateKey") && newState.privateKey !== oldState.privateKey) {
-    exports._state.publicKey = newState.privateKey ? utils.publicKeyFromPrivate(newState.privateKey) : null;
-    utils.lsSet("nonce", null);
   }
-  if (newState.hasOwnProperty("accountId") && newState.accountId !== oldState.accountId) {
-    events.notifyAccountListeners(newState.accountId);
-  }
-  if (newState.hasOwnProperty("lastWalletId") && newState.lastWalletId !== oldState.lastWalletId || newState.hasOwnProperty("accountId") && newState.accountId !== oldState.accountId || newState.hasOwnProperty("privateKey") && newState.privateKey !== oldState.privateKey) {
-    _adapter.setState(getWalletAdapterState());
-  }
-}, "update");
-const updateTxHistory = /* @__PURE__ */ __name((txStatus) => {
-  const txId = txStatus.txId;
-  exports._txHistory[txId] = {
-    ...exports._txHistory[txId] || {},
-    ...txStatus,
-    updateTimestamp: Date.now()
-  };
-  utils.lsSet("txHistory", exports._txHistory);
-  events.notifyTxListeners(exports._txHistory[txId]);
-}, "updateTxHistory");
-const getConfig = /* @__PURE__ */ __name(() => {
-  return exports._config;
-}, "getConfig");
-const getTxHistory = /* @__PURE__ */ __name(() => {
-  return exports._txHistory;
-}, "getTxHistory");
-const setConfig = /* @__PURE__ */ __name((newConf) => {
-  exports._config = { ...NETWORKS[newConf.networkId], ...newConf };
-  utils.lsSet("config", exports._config);
-}, "setConfig");
-const resetTxHistory = /* @__PURE__ */ __name(() => {
-  exports._txHistory = {};
-  utils.lsSet("txHistory", exports._txHistory);
-}, "resetTxHistory");
+}
 
 exports.DEFAULT_NETWORK_ID = DEFAULT_NETWORK_ID;
+exports.ExternalStateManagerWrapper = ExternalStateManagerWrapper;
+exports.LocalStorageStateManager = LocalStorageStateManager;
+exports.MemoryStateManager = MemoryStateManager;
 exports.NETWORKS = NETWORKS;
+exports.TxHistoryManager = TxHistoryManager;
 exports.WIDGET_URL = WIDGET_URL;
-exports._adapter = _adapter;
-exports._unbroadcastedEvents = _unbroadcastedEvents;
-exports.events = events;
-exports.getConfig = getConfig;
-exports.getTxHistory = getTxHistory;
-exports.getWalletAdapterState = getWalletAdapterState;
-exports.onAdapterStateUpdate = onAdapterStateUpdate;
-exports.resetTxHistory = resetTxHistory;
-exports.setConfig = setConfig;
-exports.update = update;
-exports.updateTxHistory = updateTxHistory;
 //# sourceMappingURL=state.cjs.map
 //# sourceMappingURL=state.cjs.map

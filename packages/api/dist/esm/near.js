@@ -1,14 +1,40 @@
 import * as reExportAllUtils from '@fastnear/utils';
 import { tryParseJson, fromBase64, lsSet, lsGet, privateKeyFromRandom, toBase64, parseJsonFromBytes, canSignWithLAK, serializeTransaction, toBase58, signHash, serializeSignedTransaction, bytesToBase64 } from '@fastnear/utils';
 import Big from 'big.js';
-import * as stateExports from './state.js';
-import { _state, update, updateTxHistory, getTxHistory, getConfig, _adapter, setConfig, NETWORKS, resetTxHistory } from './state.js';
+import { LocalStorageStateManager, TxHistoryManager, NETWORKS, DEFAULT_NETWORK_ID } from './state.js';
+import { WalletAdapter } from './intear.js';
 import { sha256 } from '@noble/hashes/sha2';
 
-/* ⋈ 🏃🏻💨 FastNEAR API - ESM (fastintear version 0.2.4) */
-/* https://www.npmjs.com/package/fastintear/v/0.2.4 */
+/* ⋈ 🏃🏻💨 FastNEAR API - ESM (fastintear version 0.3.0) */
+/* https://www.npmjs.com/package/fastintear/v/0.3.0 */
 var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
+let globalStateManager = new LocalStorageStateManager();
+let globalTxHistoryManager = new TxHistoryManager();
+let globalAdapter;
+const initializeGlobalAdapter = /* @__PURE__ */ __name(() => {
+  if (!globalAdapter) {
+    globalAdapter = new WalletAdapter({
+      onStateUpdate: /* @__PURE__ */ __name(async (adapterState) => {
+        const { accountId, lastWalletId, privateKey, publicKey } = adapterState;
+        const currentState = await globalStateManager.getState();
+        if (accountId !== currentState?.accountId) {
+          const newState = {
+            accountId: accountId || null,
+            publicKey: publicKey || null,
+            privateKey: privateKey || null,
+            networkId: currentState?.networkId || DEFAULT_NETWORK_ID,
+            lastWalletId: lastWalletId || null,
+            accessKeyContractId: currentState?.accessKeyContractId || null
+          };
+          await globalStateManager.setState(newState);
+        }
+      }, "onStateUpdate"),
+      walletUrl: "https://wallet.intear.tech"
+    });
+  }
+  return globalAdapter;
+}, "initializeGlobalAdapter");
 Big.DP = 27;
 const MaxBlockDelayMs = 1e3 * 60 * 60 * 6;
 function withBlockId(params, blockId) {
@@ -18,12 +44,15 @@ function withBlockId(params, blockId) {
   return blockId ? { ...params, block_id: blockId } : { ...params, finality: "optimistic" };
 }
 __name(withBlockId, "withBlockId");
+let globalConfig = {
+  ...NETWORKS[DEFAULT_NETWORK_ID],
+  networkId: DEFAULT_NETWORK_ID
+};
 async function sendRpc(method, params) {
-  const config2 = getConfig();
-  if (!config2?.nodeUrl) {
+  if (!globalConfig?.nodeUrl) {
     throw new Error("fastnear: getConfig() returned invalid config: missing nodeUrl.");
   }
-  const response = await fetch(config2.nodeUrl, {
+  const response = await fetch(globalConfig.nodeUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -41,14 +70,14 @@ async function sendRpc(method, params) {
 }
 __name(sendRpc, "sendRpc");
 function afterTxSent(txId) {
-  const txHistory = getTxHistory();
+  const txHistory = globalTxHistoryManager.getHistory();
   sendRpc("tx", {
     tx_hash: txHistory[txId]?.txHash,
     sender_account_id: txHistory[txId]?.tx?.signerId,
     wait_until: "EXECUTED_OPTIMISTIC"
   }).then((result) => {
     const successValue = result?.result?.status?.SuccessValue;
-    updateTxHistory({
+    globalTxHistoryManager.updateTx({
       txId,
       status: "Executed",
       result,
@@ -56,7 +85,7 @@ function afterTxSent(txId) {
       finalState: true
     });
   }).catch((error) => {
-    updateTxHistory({
+    globalTxHistoryManager.updateTx({
       txId,
       status: "ErrorAfterIncluded",
       error: tryParseJson(error.message) ?? error.message,
@@ -72,12 +101,12 @@ async function sendTxToRpc(signedTxBase64, waitUntil, txId) {
       signed_tx_base64: signedTxBase64,
       wait_until: waitUntil
     });
-    updateTxHistory({ txId, status: "Included", finalState: false });
+    globalTxHistoryManager.updateTx({ txId, status: "Included", finalState: false });
     afterTxSent(txId);
     return sendTxRes;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    updateTxHistory({
+    globalTxHistoryManager.updateTx({
       txId,
       status: "Error",
       error: tryParseJson(errorMessage) ?? errorMessage,
@@ -92,76 +121,39 @@ function generateTxId() {
   return `tx-${Date.now()}-${parseInt(randomPart, 10).toString(36)}`;
 }
 __name(generateTxId, "generateTxId");
-let lastAccountCheckTime = 0;
-const ACCOUNT_CHECK_INTERVAL = 6e4;
-const accountId = /* @__PURE__ */ __name(() => {
-  const currentTime = Date.now();
-  if (_state.accountId && currentTime - lastAccountCheckTime > ACCOUNT_CHECK_INTERVAL) {
-    lastAccountCheckTime = currentTime;
-    _adapter.getAccounts().then((accounts) => {
-      if (accounts.length === 0 && _state.accountId) {
-        update({ accountId: null, privateKey: null, lastWalletId: null });
-      }
-    }).catch((e) => {
-      console.error("Error checking account status:", e);
-    });
-  }
-  return _state.accountId;
-}, "accountId");
-const publicKey = /* @__PURE__ */ __name(() => _state.publicKey, "publicKey");
 const config = /* @__PURE__ */ __name((newConfig) => {
-  const current = getConfig();
   if (newConfig) {
-    if (newConfig.networkId && current.networkId !== newConfig.networkId) {
-      setConfig({ ...NETWORKS[newConfig.networkId], networkId: newConfig.networkId });
-      update({ accountId: null, privateKey: null, lastWalletId: null });
+    if (newConfig.networkId && globalConfig.networkId !== newConfig.networkId) {
+      globalConfig = { ...NETWORKS[newConfig.networkId], networkId: newConfig.networkId };
+      globalStateManager = new LocalStorageStateManager(newConfig.networkId);
+      globalTxHistoryManager = new TxHistoryManager();
       lsSet("block", null);
-      resetTxHistory();
     }
-    setConfig({ ...getConfig(), ...newConfig });
+    globalConfig = { ...globalConfig, ...newConfig };
   }
-  return getConfig();
+  return globalConfig;
 }, "config");
-const authStatus = /* @__PURE__ */ __name(() => {
-  if (!_state.accountId) {
-    return "SignedOut";
-  }
-  return "SignedIn";
-}, "authStatus");
-const getPublicKeyForContract = /* @__PURE__ */ __name((opts) => {
-  return publicKey();
-}, "getPublicKeyForContract");
-const selected = /* @__PURE__ */ __name(() => {
-  const config2 = getConfig();
-  const network = config2.networkId;
-  const nodeUrl = config2.nodeUrl;
-  const walletUrl = config2.walletUrl;
-  const helperUrl = config2.helperUrl;
-  const explorerUrl = config2.explorerUrl;
-  const account = accountId();
-  const contract = _state.accessKeyContractId;
-  const publicKey2 = getPublicKeyForContract();
-  return {
-    network,
-    nodeUrl,
-    walletUrl,
-    helperUrl,
-    explorerUrl,
-    account,
-    contract,
-    publicKey: publicKey2
-  };
-}, "selected");
 const requestSignIn = /* @__PURE__ */ __name(async (params = {}, callbacks = {}) => {
   const { contractId, methodNames } = params;
   const { onSuccess, onError, timeout = 6e4 } = callbacks;
-  const networkId = getConfig().networkId;
+  const networkId = globalConfig.networkId;
   const previousAccountId = lsGet("lastSignedInAccount");
-  const isReconnection = !!previousAccountId && previousAccountId !== _state.accountId;
+  const currentState = await globalStateManager.getState();
+  const isReconnection = !!previousAccountId && previousAccountId !== currentState?.accountId;
   const privateKey = privateKeyFromRandom();
-  update({ accessKeyContractId: contractId, privateKey });
+  const newState = {
+    ...currentState,
+    privateKey,
+    accessKeyContractId: contractId || null,
+    networkId,
+    accountId: currentState?.accountId || null,
+    publicKey: currentState?.publicKey || null,
+    lastWalletId: currentState?.lastWalletId || null
+  };
+  await globalStateManager.setState(newState);
   try {
-    const result = await _adapter.signIn({
+    const adapter = initializeGlobalAdapter();
+    const result = await adapter.signIn({
       networkId,
       contractId,
       methodNames,
@@ -187,12 +179,15 @@ const requestSignIn = /* @__PURE__ */ __name(async (params = {}, callbacks = {})
     }
     if (result.accountId) {
       lsSet("lastSignedInAccount", result.accountId);
-      update({
+      const finalState = {
         accountId: result.accountId,
-        privateKey: result.privateKey,
-        publicKey: result.publicKey,
-        accessKeyContractId: contractId
-      });
+        privateKey: result.privateKey || privateKey,
+        publicKey: result.publicKey || null,
+        networkId,
+        lastWalletId: null,
+        accessKeyContractId: contractId || null
+      };
+      await globalStateManager.setState(finalState);
       const successResult = {
         accountId: result.accountId,
         publicKey: result.publicKey,
@@ -207,7 +202,7 @@ const requestSignIn = /* @__PURE__ */ __name(async (params = {}, callbacks = {})
       return successResult;
     } else {
       console.warn("@fastnear: signIn resolved without accountId or error.");
-      update({ accountId: null, privateKey: null, publicKey: null, accessKeyContractId: null });
+      await globalStateManager.clearState();
       const error = {
         type: "unknown",
         message: "Sign-in completed but no account information was returned",
@@ -255,58 +250,60 @@ const view = /* @__PURE__ */ __name(async ({
   return parseJsonFromBytes(queryResult.result.result);
 }, "view");
 const queryAccount = /* @__PURE__ */ __name(async ({
-  accountId: accountId2,
+  accountId,
   blockId
 }) => {
   return sendRpc(
     "query",
-    withBlockId({ request_type: "view_account", account_id: accountId2 }, blockId)
+    withBlockId({ request_type: "view_account", account_id: accountId }, blockId)
   );
 }, "queryAccount");
 const queryBlock = /* @__PURE__ */ __name(async ({ blockId }) => {
   return sendRpc("block", withBlockId({}, blockId));
 }, "queryBlock");
 const queryAccessKey = /* @__PURE__ */ __name(async ({
-  accountId: accountId2,
-  publicKey: publicKey2,
+  accountId,
+  publicKey,
   blockId
 }) => {
   return sendRpc(
     "query",
     withBlockId(
-      { request_type: "view_access_key", account_id: accountId2, public_key: publicKey2 },
+      { request_type: "view_access_key", account_id: accountId, public_key: publicKey },
       blockId
     )
   );
 }, "queryAccessKey");
-const queryTx = /* @__PURE__ */ __name(async ({ txHash, accountId: accountId2 }) => {
-  return sendRpc("tx", [txHash, accountId2]);
+const queryTx = /* @__PURE__ */ __name(async ({ txHash, accountId }) => {
+  return sendRpc("tx", [txHash, accountId]);
 }, "queryTx");
 const localTxHistory = /* @__PURE__ */ __name(() => {
-  return getTxHistory();
+  return globalTxHistoryManager.getHistory();
 }, "localTxHistory");
 const signOut = /* @__PURE__ */ __name(async () => {
-  await _adapter.signOut();
-  update({ accountId: null, privateKey: null, accessKeyContractId: null, lastWalletId: null });
+  const adapter = initializeGlobalAdapter();
+  await adapter.signOut();
+  await globalStateManager.clearState();
 }, "signOut");
 const signMessage = /* @__PURE__ */ __name(async ({
   message,
   recipient,
   nonce,
   callbackUrl,
-  state: state2
+  state
 }) => {
-  const signerId = _state.accountId;
+  const currentState = await globalStateManager.getState();
+  const signerId = currentState?.accountId;
   if (!signerId) throw new Error("Must sign in");
   const messageNonce = nonce || crypto.getRandomValues(new Uint8Array(32));
   try {
-    const result = await _adapter.signMessage({
+    const adapter = initializeGlobalAdapter();
+    const result = await adapter.signMessage({
       message,
       recipient,
-      // @ts-ignore - We know the adapter expects Buffer but we're using Uint8Array
       nonce: messageNonce,
       callbackUrl,
-      state: state2
+      state
     });
     return {
       accountId: result.accountId,
@@ -323,32 +320,24 @@ const sendTx = /* @__PURE__ */ __name(async ({
   actions: actions2,
   waitUntil
 }) => {
-  const signerId = _state.accountId;
+  const currentState = await globalStateManager.getState();
+  const signerId = currentState?.accountId;
   if (!signerId) throw new Error("Must sign in");
-  const publicKey2 = _state.publicKey ?? "";
-  const privKey = _state.privateKey;
+  const publicKeyValue = currentState?.publicKey ?? "";
+  const privKey = currentState?.privateKey;
   const txId = generateTxId();
-  if (!privKey || receiverId !== _state.accessKeyContractId || !canSignWithLAK(actions2) || hasNonZeroDeposit(actions2)) {
+  if (!privKey || receiverId !== currentState?.accessKeyContractId || !canSignWithLAK(actions2) || hasNonZeroDeposit(actions2)) {
     const jsonTx = { signerId, receiverId, actions: actions2 };
-    updateTxHistory({ status: "Pending", txId, tx: jsonTx, finalState: false });
-    const url = new URL(typeof window !== "undefined" ? window.location.href : "");
-    url.searchParams.set("txIds", txId);
-    const existingParams = new URLSearchParams(window.location.search);
-    existingParams.forEach((value, key) => {
-      if (!url.searchParams.has(key)) {
-        url.searchParams.set(key, value);
-      }
-    });
-    url.searchParams.delete("errorCode");
-    url.searchParams.delete("errorMessage");
+    globalTxHistoryManager.updateTx({ status: "Pending", txId, tx: jsonTx, finalState: false });
     try {
-      const result = await _adapter.sendTransactions({
+      const adapter = initializeGlobalAdapter();
+      const result = await adapter.sendTransactions({
         transactions: [jsonTx]
       });
       if (result.outcomes?.length) {
         result.outcomes.forEach((r) => {
           const transactionEntry = r.get("transaction");
-          updateTxHistory({
+          globalTxHistoryManager.updateTx({
             txId,
             status: "Executed",
             result: r,
@@ -357,9 +346,9 @@ const sendTx = /* @__PURE__ */ __name(async ({
           });
         });
       } else if (result.rejected) {
-        updateTxHistory({ txId, status: "RejectedByUser", finalState: true });
+        globalTxHistoryManager.updateTx({ txId, status: "RejectedByUser", finalState: true });
       } else if (result.error) {
-        updateTxHistory({
+        globalTxHistoryManager.updateTx({
           txId,
           status: "Error",
           error: tryParseJson(result.error),
@@ -369,7 +358,7 @@ const sendTx = /* @__PURE__ */ __name(async ({
       return result;
     } catch (err) {
       console.error("fastnear: error sending tx using adapter:", err);
-      updateTxHistory({
+      globalTxHistoryManager.updateTx({
         txId,
         status: "Error",
         error: tryParseJson(err.message),
@@ -380,9 +369,9 @@ const sendTx = /* @__PURE__ */ __name(async ({
   }
   let nonce = lsGet("nonce");
   if (nonce == null) {
-    const accessKey = await queryAccessKey({ accountId: signerId, publicKey: publicKey2 });
+    const accessKey = await queryAccessKey({ accountId: signerId, publicKey: publicKeyValue });
     if (accessKey.result.error) {
-      throw new Error(`Access key error: ${accessKey.result.error} when attempting to get nonce for ${signerId} for public key ${publicKey2}`);
+      throw new Error(`Access key error: ${accessKey.result.error} when attempting to get nonce for ${signerId} for public key ${publicKeyValue}`);
     }
     nonce = accessKey.result.nonce;
     lsSet("nonce", nonce);
@@ -403,7 +392,7 @@ const sendTx = /* @__PURE__ */ __name(async ({
   const blockHash = lastKnownBlock.header.hash;
   const plainTransactionObj = {
     signerId,
-    publicKey: publicKey2,
+    publicKey: publicKeyValue,
     nonce,
     receiverId,
     blockHash,
@@ -415,7 +404,7 @@ const sendTx = /* @__PURE__ */ __name(async ({
   const signatureBase58 = signHash(txHashBytes, privKey, { returnBase58: true });
   const signedTransactionBytes = serializeSignedTransaction(plainTransactionObj, signatureBase58);
   const signedTxBase64 = bytesToBase64(signedTransactionBytes);
-  updateTxHistory({
+  globalTxHistoryManager.updateTx({
     status: "Pending",
     txId,
     tx: plainTransactionObj,
@@ -443,7 +432,6 @@ function hasNonZeroDeposit(actions2) {
 __name(hasNonZeroDeposit, "hasNonZeroDeposit");
 const exp = {
   utils: {},
-  // we will map this in a moment, giving keys, for IDE hints
   borsh: reExportAllUtils.exp.borsh,
   borshSchema: reExportAllUtils.exp.borshSchema.getBorshSchema()
 };
@@ -451,67 +439,6 @@ for (const key in reExportAllUtils) {
   exp.utils[key] = reExportAllUtils[key];
 }
 const utils = exp.utils;
-const state = {};
-for (const key in stateExports) {
-  state[key] = stateExports[key];
-}
-const event = state["events"];
-delete state["events"];
-try {
-  if (typeof window !== "undefined") {
-    const url = new URL(window.location.href);
-    const accId = url.searchParams.get("account_id");
-    const pubKey = url.searchParams.get("public_key");
-    const errCode = url.searchParams.get("errorCode");
-    const errMsg = url.searchParams.get("errorMessage");
-    const decodedErrMsg = errMsg ? decodeURIComponent(errMsg) : null;
-    const txHashes = url.searchParams.get("transactionHashes");
-    const txIds = url.searchParams.get("txIds");
-    if (errCode || errMsg) {
-      console.warn(new Error(`Wallet raises:
-code: ${errCode}
-message: ${decodedErrMsg}`));
-    }
-    if (accId && pubKey) {
-      if (pubKey === _state.publicKey) {
-        update({ accountId: accId });
-      } else {
-        if (authStatus() === "SignedIn") {
-          console.warn("Public key mismatch from wallet redirect", pubKey, _state.publicKey);
-        }
-        url.searchParams.delete("public_key");
-      }
-    }
-    if (txHashes || txIds) {
-      const hashArr = txHashes ? txHashes.split(",") : [];
-      const idArr = txIds ? txIds.split(",") : [];
-      if (idArr.length > hashArr.length) {
-        idArr.forEach((id) => {
-          updateTxHistory({ txId: id, status: "RejectedByUser", finalState: true });
-        });
-      } else if (idArr.length === hashArr.length) {
-        idArr.forEach((id, i) => {
-          updateTxHistory({
-            txId: id,
-            status: "PendingGotTxHash",
-            txHash: hashArr[i],
-            finalState: false
-          });
-          afterTxSent(id);
-        });
-      } else {
-        console.error(new Error("Transaction hash mismatch from wallet redirect"), idArr, hashArr);
-      }
-    }
-    url.searchParams.delete("txIds");
-    if (authStatus() === "SignedOut") {
-      url.searchParams.delete("errorCode");
-      url.searchParams.delete("errorMessage");
-    }
-  }
-} catch (e) {
-  console.error("Error handling wallet redirect:", e);
-}
 const actions = {
   functionCall: /* @__PURE__ */ __name(({
     methodName,
@@ -541,9 +468,7 @@ const actions = {
         methodName,
         args: finalArgs,
         gas: gas || "30000000000000",
-        // Default gas
         deposit: deposit || "0"
-        // Default deposit
       }
     };
   }, "functionCall"),
@@ -553,42 +478,42 @@ const actions = {
       deposit: yoctoAmount
     }
   }), "transfer"),
-  stake: /* @__PURE__ */ __name(({ amount, publicKey: publicKey2 }) => ({
+  stake: /* @__PURE__ */ __name(({ amount, publicKey }) => ({
     type: "Stake",
     params: {
       stake: amount,
-      publicKey: publicKey2
+      publicKey
     }
   }), "stake"),
-  addFullAccessKey: /* @__PURE__ */ __name(({ publicKey: publicKey2 }) => ({
+  addFullAccessKey: /* @__PURE__ */ __name(({ publicKey }) => ({
     type: "AddKey",
     params: {
-      publicKey: publicKey2,
+      publicKey,
       accessKey: { permission: "FullAccess" }
     }
   }), "addFullAccessKey"),
   addLimitedAccessKey: /* @__PURE__ */ __name(({
-    publicKey: publicKey2,
+    publicKey,
     allowance,
-    accountId: accountId2,
+    accountId,
     methodNames
   }) => ({
     type: "AddKey",
     params: {
-      publicKey: publicKey2,
+      publicKey,
       accessKey: {
         permission: {
-          receiverId: accountId2,
+          receiverId: accountId,
           allowance,
           methodNames
         }
       }
     }
   }), "addLimitedAccessKey"),
-  deleteKey: /* @__PURE__ */ __name(({ publicKey: publicKey2 }) => ({
+  deleteKey: /* @__PURE__ */ __name(({ publicKey }) => ({
     type: "DeleteKey",
     params: {
-      publicKey: publicKey2
+      publicKey
     }
   }), "deleteKey"),
   deleteAccount: /* @__PURE__ */ __name(({ beneficiaryId }) => ({
@@ -616,6 +541,6 @@ const actions = {
   }, "deployContract")
 };
 
-export { MaxBlockDelayMs, accountId, actions, afterTxSent, authStatus, config, event, exp, generateTxId, getPublicKeyForContract, localTxHistory, publicKey, queryAccessKey, queryAccount, queryBlock, queryTx, requestSignIn, selected, sendRpc, sendTx, sendTxToRpc, signMessage, signOut, state, utils, view, withBlockId };
+export { MaxBlockDelayMs, actions, afterTxSent, config, exp, generateTxId, localTxHistory, queryAccessKey, queryAccount, queryBlock, queryTx, requestSignIn, sendRpc, sendTx, sendTxToRpc, signMessage, signOut, utils, view, withBlockId };
 //# sourceMappingURL=near.js.map
 //# sourceMappingURL=near.js.map

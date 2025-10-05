@@ -7,8 +7,8 @@ var ed25519 = require('@noble/curves/ed25519');
 var sha2 = require('@noble/hashes/sha2');
 var near = require('./near');
 
-/* ⋈ 🏃🏻💨 FastNEAR API - CJS (fastintear version 0.2.4) */
-/* https://www.npmjs.com/package/fastintear/v/0.2.4 */
+/* ⋈ 🏃🏻💨 FastNEAR API - CJS (fastintear version 0.3.0) */
+/* https://www.npmjs.com/package/fastintear/v/0.3.0 */
 var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 const DEFAULT_WALLET_DOMAIN = "https://wallet.intear.tech";
@@ -435,7 +435,7 @@ class WalletAdapter {
               methodNames: functionCallKeyAdded ? methodNames ?? [] : [],
               logoutKey,
               networkId,
-              walletUrl: event.origin,
+              walletUrl: event.data.walletUrl,
               useBridge
             };
             window.localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));

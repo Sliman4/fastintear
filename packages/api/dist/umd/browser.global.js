@@ -1,5 +1,5 @@
-/* ⋈ 🏃🏻💨 FastNEAR API - IIFE/UMD (fastintear version 0.2.4) */
-/* https://www.npmjs.com/package/fastintear/v/0.2.4 */
+/* ⋈ 🏃🏻💨 FastNEAR API - IIFE/UMD (fastintear version 0.3.0) */
+/* https://www.npmjs.com/package/fastintear/v/0.3.0 */
 "use strict";
 var near = (() => {
   var __defProp = Object.defineProperty;
@@ -25,30 +25,23 @@ var near = (() => {
   var src_exports3 = {};
   __export(src_exports3, {
     MaxBlockDelayMs: () => MaxBlockDelayMs,
-    accountId: () => accountId,
     actions: () => actions,
     afterTxSent: () => afterTxSent,
-    authStatus: () => authStatus,
     config: () => config,
     createNearClient: () => createNearClient,
-    event: () => event,
     exp: () => exp2,
     generateTxId: () => generateTxId,
-    getPublicKeyForContract: () => getPublicKeyForContract,
     localTxHistory: () => localTxHistory,
-    publicKey: () => publicKey,
     queryAccessKey: () => queryAccessKey,
     queryAccount: () => queryAccount,
     queryBlock: () => queryBlock,
     queryTx: () => queryTx,
     requestSignIn: () => requestSignIn,
-    selected: () => selected,
     sendRpc: () => sendRpc,
     sendTx: () => sendTx,
     sendTxToRpc: () => sendTxToRpc,
     signMessage: () => signMessage,
     signOut: () => signOut,
-    state: () => state,
     utils: () => utils,
     view: () => view,
     withBlockId: () => withBlockId
@@ -260,11 +253,11 @@ var near = (() => {
       if (len % 4)
         throw new Error("_sha2: outputLen should be aligned to 32bit");
       const outLen = len / 4;
-      const state2 = this.get();
-      if (outLen > state2.length)
+      const state = this.get();
+      if (outLen > state.length)
         throw new Error("_sha2: outputLen bigger than state");
       for (let i = 0; i < outLen; i++)
-        oview.setUint32(4 * i, state2[i], isLE);
+        oview.setUint32(4 * i, state[i], isLE);
     }
     digest() {
       const { buffer, outputLen } = this;
@@ -1586,12 +1579,12 @@ var near = (() => {
     }
     __name(sign, "sign");
     const verifyOpts = VERIFY_DEFAULT;
-    function verify(sig, msg, publicKey2, options = verifyOpts) {
+    function verify(sig, msg, publicKey, options = verifyOpts) {
       const { context, zip215 } = options;
       const len = Fp2.BYTES;
       sig = ensureBytes("signature", sig, 2 * len);
       msg = ensureBytes("message", msg);
-      publicKey2 = ensureBytes("publicKey", publicKey2, len);
+      publicKey = ensureBytes("publicKey", publicKey, len);
       if (zip215 !== void 0)
         abool("zip215", zip215);
       if (prehash)
@@ -1599,7 +1592,7 @@ var near = (() => {
       const s = bytesToNumberLE(sig.slice(len, 2 * len));
       let A, R, SB;
       try {
-        A = Point.fromHex(publicKey2, zip215);
+        A = Point.fromHex(publicKey, zip215);
         R = Point.fromHex(sig.slice(0, len), zip215);
         SB = G.multiplyUnsafe(s);
       } catch (error) {
@@ -2678,8 +2671,8 @@ var near = (() => {
   var keyToString = /* @__PURE__ */ __name((key) => `ed25519:${binary_to_base58_default(key)}`, "keyToString");
   function publicKeyFromPrivate(privateKey) {
     const secret = keyFromString(privateKey).slice(0, 32);
-    const publicKey2 = ed25519.getPublicKey(secret);
-    return keyToString(publicKey2);
+    const publicKey = ed25519.getPublicKey(secret);
+    return keyToString(publicKey);
   }
   __name(publicKeyFromPrivate, "publicKeyFromPrivate");
   function privateKeyFromRandom() {
@@ -3579,26 +3572,280 @@ var near = (() => {
   };
 
   // src/state.ts
-  var state_exports = {};
-  __export(state_exports, {
-    DEFAULT_NETWORK_ID: () => DEFAULT_NETWORK_ID,
-    NETWORKS: () => NETWORKS,
-    WIDGET_URL: () => WIDGET_URL,
-    _adapter: () => _adapter,
-    _config: () => _config,
-    _state: () => _state,
-    _txHistory: () => _txHistory,
-    _unbroadcastedEvents: () => _unbroadcastedEvents,
-    events: () => events,
-    getConfig: () => getConfig,
-    getTxHistory: () => getTxHistory,
-    getWalletAdapterState: () => getWalletAdapterState,
-    onAdapterStateUpdate: () => onAdapterStateUpdate,
-    resetTxHistory: () => resetTxHistory,
-    setConfig: () => setConfig,
-    update: () => update,
-    updateTxHistory: () => updateTxHistory
-  });
+  var WIDGET_URL = "https://wallet.intear.tech";
+  var DEFAULT_NETWORK_ID = "mainnet";
+  var NETWORKS = {
+    testnet: {
+      networkId: "testnet",
+      nodeUrl: "https://rpc.testnet.fastnear.com/"
+    },
+    mainnet: {
+      networkId: "mainnet",
+      nodeUrl: "https://rpc.mainnet.fastnear.com/"
+    }
+  };
+  var LocalStorageStateManager = class {
+    constructor(networkId = DEFAULT_NETWORK_ID) {
+      this.networkId = networkId;
+      this.loadInitialState();
+    }
+    static {
+      __name(this, "LocalStorageStateManager");
+    }
+    subscribers = /* @__PURE__ */ new Set();
+    currentState = null;
+    loadInitialState() {
+      try {
+        const savedState = lsGet("walletState");
+        if (savedState && savedState.networkId === this.networkId) {
+          if (savedState.privateKey && !savedState.publicKey) {
+            savedState.publicKey = publicKeyFromPrivate(savedState.privateKey);
+          }
+          this.currentState = savedState;
+        }
+      } catch (e) {
+        console.error("Error loading initial state:", e);
+        this.currentState = null;
+      }
+    }
+    async getState() {
+      return this.currentState;
+    }
+    async setState(state) {
+      if (state.privateKey && !state.publicKey) {
+        state.publicKey = publicKeyFromPrivate(state.privateKey);
+      }
+      this.currentState = state;
+      lsSet("walletState", state);
+      if (state.privateKey !== this.currentState?.privateKey) {
+        lsSet("nonce", null);
+      }
+      this.notifySubscribers(state);
+    }
+    async clearState() {
+      const clearedState = {
+        accountId: null,
+        publicKey: null,
+        privateKey: null,
+        networkId: this.networkId,
+        lastWalletId: null,
+        accessKeyContractId: null
+      };
+      this.currentState = clearedState;
+      lsSet("walletState", null);
+      lsSet("nonce", null);
+      lsSet("block", null);
+      this.notifySubscribers(clearedState);
+    }
+    subscribe(callback) {
+      this.subscribers.add(callback);
+      if (this.currentState) {
+        callback(this.currentState);
+      }
+      return () => {
+        this.subscribers.delete(callback);
+      };
+    }
+    notifySubscribers(state) {
+      this.subscribers.forEach((callback) => {
+        try {
+          callback(state);
+        } catch (e) {
+          console.error("Error in state subscriber:", e);
+        }
+      });
+    }
+  };
+  var MemoryStateManager = class {
+    constructor(networkId = DEFAULT_NETWORK_ID) {
+      this.networkId = networkId;
+      this.currentState = {
+        accountId: null,
+        publicKey: null,
+        privateKey: null,
+        networkId: this.networkId,
+        lastWalletId: null,
+        accessKeyContractId: null
+      };
+    }
+    static {
+      __name(this, "MemoryStateManager");
+    }
+    subscribers = /* @__PURE__ */ new Set();
+    currentState = null;
+    async getState() {
+      return this.currentState;
+    }
+    async setState(state) {
+      if (state.privateKey && !state.publicKey) {
+        state.publicKey = publicKeyFromPrivate(state.privateKey);
+      }
+      this.currentState = state;
+      this.notifySubscribers(state);
+    }
+    async clearState() {
+      const clearedState = {
+        accountId: null,
+        publicKey: null,
+        privateKey: null,
+        networkId: this.networkId,
+        lastWalletId: null,
+        accessKeyContractId: null
+      };
+      this.currentState = clearedState;
+      this.notifySubscribers(clearedState);
+    }
+    subscribe(callback) {
+      this.subscribers.add(callback);
+      if (this.currentState) {
+        callback(this.currentState);
+      }
+      return () => {
+        this.subscribers.delete(callback);
+      };
+    }
+    notifySubscribers(state) {
+      this.subscribers.forEach((callback) => {
+        try {
+          callback(state);
+        } catch (e) {
+          console.error("Error in state subscriber:", e);
+        }
+      });
+    }
+  };
+  var ExternalStateManagerWrapper = class {
+    constructor(externalManager) {
+      this.externalManager = externalManager;
+      this.loadInitialState();
+    }
+    static {
+      __name(this, "ExternalStateManagerWrapper");
+    }
+    subscribers = /* @__PURE__ */ new Set();
+    currentState = null;
+    async loadInitialState() {
+      try {
+        this.currentState = await this.externalManager.getState();
+      } catch (e) {
+        console.error("Error loading external state:", e);
+        this.currentState = null;
+      }
+    }
+    async getState() {
+      try {
+        this.currentState = await this.externalManager.getState();
+        return this.currentState;
+      } catch (e) {
+        console.error("Error getting external state:", e);
+        return this.currentState;
+      }
+    }
+    async setState(state) {
+      try {
+        if (state.privateKey && !state.publicKey) {
+          state.publicKey = publicKeyFromPrivate(state.privateKey);
+        }
+        await this.externalManager.setState(state);
+        this.currentState = state;
+        this.notifySubscribers(state);
+      } catch (e) {
+        console.error("Error setting external state:", e);
+        throw e;
+      }
+    }
+    async clearState() {
+      try {
+        await this.externalManager.clearState();
+        this.currentState = null;
+        this.subscribers.forEach((callback) => {
+          try {
+            callback({
+              accountId: null,
+              publicKey: null,
+              privateKey: null,
+              networkId: this.currentState?.networkId || DEFAULT_NETWORK_ID,
+              lastWalletId: null,
+              accessKeyContractId: null
+            });
+          } catch (e) {
+            console.error("Error in state subscriber:", e);
+          }
+        });
+      } catch (e) {
+        console.error("Error clearing external state:", e);
+        throw e;
+      }
+    }
+    subscribe(callback) {
+      this.subscribers.add(callback);
+      if (this.currentState) {
+        callback(this.currentState);
+      }
+      return () => {
+        this.subscribers.delete(callback);
+      };
+    }
+    notifySubscribers(state) {
+      this.subscribers.forEach((callback) => {
+        try {
+          callback(state);
+        } catch (e) {
+          console.error("Error in state subscriber:", e);
+        }
+      });
+    }
+  };
+  var TxHistoryManager = class {
+    static {
+      __name(this, "TxHistoryManager");
+    }
+    txHistory = {};
+    subscribers = /* @__PURE__ */ new Set();
+    constructor() {
+      this.loadHistory();
+    }
+    loadHistory() {
+      try {
+        this.txHistory = lsGet("txHistory") || {};
+      } catch (e) {
+        console.error("Error loading transaction history:", e);
+        this.txHistory = {};
+      }
+    }
+    updateTx(txStatus) {
+      const txId = txStatus.txId;
+      this.txHistory[txId] = {
+        ...this.txHistory[txId] || {},
+        ...txStatus,
+        updateTimestamp: Date.now()
+      };
+      lsSet("txHistory", this.txHistory);
+      this.notifySubscribers(this.txHistory[txId]);
+    }
+    getHistory() {
+      return this.txHistory;
+    }
+    clearHistory() {
+      this.txHistory = {};
+      lsSet("txHistory", {});
+    }
+    subscribe(callback) {
+      this.subscribers.add(callback);
+      return () => {
+        this.subscribers.delete(callback);
+      };
+    }
+    notifySubscribers(tx) {
+      this.subscribers.forEach((callback) => {
+        try {
+          callback(tx);
+        } catch (e) {
+          console.error("Error in tx subscriber:", e);
+        }
+      });
+    }
+  };
 
   // src/intear.ts
   var DEFAULT_WALLET_DOMAIN = "https://wallet.intear.tech";
@@ -3637,9 +3884,9 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
     reconnectAttempts = 0;
     maxReconnectAttempts = 3;
     logger;
-    constructor(network, accountId2, appPrivateKey, userLogoutPublicKey, logoutBridgeServiceUrl, logger) {
+    constructor(network, accountId, appPrivateKey, userLogoutPublicKey, logoutBridgeServiceUrl, logger) {
       this.network = network;
-      this.accountId = accountId2;
+      this.accountId = accountId;
       this.appPrivateKey = appPrivateKey;
       this.userLogoutPublicKey = userLogoutPublicKey;
       this.logoutBridgeServiceUrl = logoutBridgeServiceUrl;
@@ -3671,8 +3918,8 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
           };
           this.ws.send(JSON.stringify(authMessage));
         };
-        this.ws.onmessage = async (event2) => {
-          const message = JSON.parse(event2.data);
+        this.ws.onmessage = async (event) => {
+          const message = JSON.parse(event.data);
           if ("Success" in message) {
             this.logger.log("LogoutWebSocket:", message.Success.message);
             this.reconnectAttempts = 0;
@@ -3760,14 +4007,14 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
         this.logger.warn("LogoutWebSocket: Error creating WebSocket connection:", error);
       }
     }
-    static initialize(network, accountId2, appPrivateKey, userLogoutPublicKey, logoutBridgeServiceUrl, logger) {
+    static initialize(network, accountId, appPrivateKey, userLogoutPublicKey, logoutBridgeServiceUrl, logger) {
       try {
         if (_LogoutWebSocket.instance) {
           return _LogoutWebSocket.instance;
         }
         _LogoutWebSocket.instance = new _LogoutWebSocket(
           network,
-          accountId2,
+          accountId,
           appPrivateKey,
           userLogoutPublicKey,
           logoutBridgeServiceUrl,
@@ -3827,9 +4074,9 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
     }
   }
   __name(getSavedData, "getSavedData");
-  function verifyLogoutSignature(logoutInfo, accountId2, appPublicKeyString, userLogoutPublicKey) {
+  function verifyLogoutSignature(logoutInfo, accountId, appPublicKeyString, userLogoutPublicKey) {
     try {
-      const logoutMessageToVerify = `logout|${logoutInfo.nonce}|${accountId2}|${appPublicKeyString}`;
+      const logoutMessageToVerify = `logout|${logoutInfo.nonce}|${accountId}|${appPublicKeyString}`;
       const sigParts = logoutInfo.signature.split(":");
       if (sigParts.length !== 2 || sigParts[0] !== "ed25519" && sigParts[0] !== "secp256k1") {
         console.error("WalletAdapter: Invalid signature format:", logoutInfo.signature);
@@ -3968,28 +4215,28 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
         iframe.style.border = "none";
         iframe.style.zIndex = "100000";
         document.body.appendChild(iframe);
-        const listener = /* @__PURE__ */ __name(async (event2) => {
-          if (event2.origin !== new URL(this.#iframeOriginUrl).origin) {
+        const listener = /* @__PURE__ */ __name(async (event) => {
+          if (event.origin !== new URL(this.#iframeOriginUrl).origin) {
             return;
           }
-          if (!event2.data || !event2.data.type) {
+          if (!event.data || !event.data.type) {
             return;
           }
-          console.debug("Message from connect popup", event2.data);
-          switch (event2.data.type) {
+          console.debug("Message from connect popup", event.data);
+          switch (event.data.type) {
             case "ready": {
               const origin = location.origin || "file://local-html-file";
               const message = JSON.stringify({ origin, messageToSign: JSON.stringify(messageToSign) });
               const nonce = Date.now();
               const signatureString = await generateAuthSignature(privateKey, message, nonce);
-              const publicKey2 = publicKeyFromPrivate(privateKey);
+              const publicKey = publicKeyFromPrivate(privateKey);
               iframe.contentWindow?.postMessage(
                 {
                   type: "signIn",
                   data: {
                     contractId,
                     methodNames,
-                    publicKey: publicKey2,
+                    publicKey,
                     networkId,
                     nonce,
                     message,
@@ -4003,7 +4250,7 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
             }
             case "connected": {
               onPending?.({ step: "processing_result", networkId, contractId });
-              const accounts = event2.data.accounts;
+              const accounts = event.data.accounts;
               if (!accounts || accounts.length === 0) {
                 const error = {
                   type: "wallet_error",
@@ -4015,9 +4262,9 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
                 onError?.(error);
                 return reject(new IntearAdapterError("No accounts returned from wallet"));
               }
-              const functionCallKeyAdded = event2.data.functionCallKeyAdded;
-              const logoutKey = event2.data.logoutKey;
-              const useBridge = event2.data.useBridge;
+              const functionCallKeyAdded = event.data.functionCallKeyAdded;
+              const logoutKey = event.data.logoutKey;
+              const useBridge = event.data.useBridge;
               const dataToSave = {
                 accounts,
                 key: privateKey,
@@ -4025,7 +4272,7 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
                 methodNames: functionCallKeyAdded ? methodNames ?? [] : [],
                 logoutKey,
                 networkId,
-                walletUrl: event2.origin,
+                walletUrl: event.data.walletUrl,
                 useBridge
               };
               window.localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
@@ -4053,19 +4300,19 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
                 this.#logoutBridgeService,
                 console
               );
-              console.log("eventdata", event2.data);
+              console.log("eventdata", event.data);
               resolve({
                 accountId: accounts[0].accountId,
                 accounts,
                 privateKey: dataToSave.key,
                 publicKey: publicKeyFromPrivate(dataToSave.key),
-                signedMessage: event2.data.signedMessage ? {
-                  accountId: event2.data.signedMessage.accountId,
-                  publicKey: event2.data.signedMessage.publicKey,
+                signedMessage: event.data.signedMessage ? {
+                  accountId: event.data.signedMessage.accountId,
+                  publicKey: event.data.signedMessage.publicKey,
                   signature: btoa(
                     Array.from(
                       base58_to_binary_default(
-                        event2.data.signedMessage.signature.split(":")[1]
+                        event.data.signedMessage.signature.split(":")[1]
                       ),
                       (byte) => String.fromCharCode(byte)
                     ).join("")
@@ -4075,11 +4322,11 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
               break;
             }
             case "error": {
-              console.error("Error from connect popup", event2.data.message);
+              console.error("Error from connect popup", event.data.message);
               iframe.contentWindow?.postMessage(
                 {
                   type: "close",
-                  message: event2.data.message
+                  message: event.data.message
                 },
                 this.#iframeOriginUrl
               );
@@ -4088,14 +4335,14 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
             case "close": {
               window.removeEventListener("message", listener);
               iframe.remove();
-              if (event2.data.message) {
-                const errorMessage = event2.data.message || "Unknown error from wallet popup";
+              if (event.data.message) {
+                const errorMessage = event.data.message || "Unknown error from wallet popup";
                 const error = {
                   type: "wallet_error",
                   message: errorMessage,
                   retryable: true,
                   suggestedAction: "contact_support",
-                  originalError: event2.data,
+                  originalError: event.data,
                   timestamp: Date.now()
                 };
                 onError?.(error);
@@ -4115,12 +4362,12 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
       LogoutWebSocket.getInstance()?.close();
       if (savedData) {
         try {
-          const accountId2 = savedData.accounts[0].accountId;
+          const accountId = savedData.accounts[0].accountId;
           const appPrivateKey = savedData.key;
           const appPublicKeyString = publicKeyFromPrivate(appPrivateKey);
           const networkId = savedData.networkId;
           const nonce = Date.now();
-          const messageText = `logout|${nonce}|${accountId2}|${appPublicKeyString}`;
+          const messageText = `logout|${nonce}|${accountId}|${appPublicKeyString}`;
           const messageBytes = new TextEncoder().encode(messageText);
           const hashBytes = sha256(messageBytes);
           const signatureBase58 = signHash(hashBytes, appPrivateKey, { returnBase58: true });
@@ -4129,7 +4376,7 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              account_id: accountId2,
+              account_id: accountId,
               app_public_key: appPublicKeyString,
               nonce,
               signature: signatureString
@@ -4178,8 +4425,8 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
       }
       return { accountId: null, networkId: null, publicKey: null };
     }
-    setState(state2) {
-      this.#onStateUpdate?.(state2);
+    setState(state) {
+      this.#onStateUpdate?.(state);
     }
     async getAccounts() {
       console.debug("WalletAdapter: getAccounts");
@@ -4212,7 +4459,7 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
       console.debug("WalletAdapter: sendTransactions", { transactions });
       const savedData = assertLoggedIn();
       const privateKey = savedData.key;
-      const accountId2 = savedData.accounts[0].accountId;
+      const accountId = savedData.accounts[0].accountId;
       if (savedData.useBridge) {
         return new Promise((resolve, reject) => {
           const iframe = document.createElement("iframe");
@@ -4241,9 +4488,9 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
             );
           };
           let currentSessionId = null;
-          ws.onmessage = (event2) => {
+          ws.onmessage = (event) => {
             try {
-              const data = JSON.parse(event2.data);
+              const data = JSON.parse(event.data);
               if (data.session_id) {
                 currentSessionId = data.session_id;
                 console.debug(
@@ -4298,23 +4545,23 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
           return reject(new IntearAdapterError("Popup was blocked"));
         }
         let done = false;
-        const listener = /* @__PURE__ */ __name(async (event2) => {
-          if (event2.origin !== new URL(savedData.walletUrl ?? this.#iframeOriginUrl).origin) return;
-          if (!event2.data || !event2.data.type) return;
-          console.debug("Message from send-transactions popup", event2.data);
-          switch (event2.data.type) {
+        const listener = /* @__PURE__ */ __name(async (event) => {
+          if (event.origin !== new URL(savedData.walletUrl ?? this.#iframeOriginUrl).origin) return;
+          if (!event.data || !event.data.type) return;
+          console.debug("Message from send-transactions popup", event.data);
+          switch (event.data.type) {
             case "ready": {
               const transactionsString = JSON.stringify(transactions);
               const nonce = Date.now();
               const signatureString = await generateAuthSignature(privateKey, transactionsString, nonce);
-              const publicKey2 = publicKeyFromPrivate(privateKey);
+              const publicKey = publicKeyFromPrivate(privateKey);
               popup.postMessage(
                 {
                   type: "signAndSendTransactions",
                   data: {
                     transactions: transactionsString,
-                    accountId: accountId2,
-                    publicKey: publicKey2,
+                    accountId,
+                    publicKey,
                     nonce,
                     signature: signatureString
                   }
@@ -4327,14 +4574,14 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
               done = true;
               popup.close();
               window.removeEventListener("message", listener);
-              resolve({ outcomes: event2.data.outcomes });
+              resolve({ outcomes: event.data.outcomes });
               break;
             }
             case "error": {
               done = true;
               popup.close();
               window.removeEventListener("message", listener);
-              reject(new IntearAdapterError(event2.data.message || "Unknown error from send-transactions popup"));
+              reject(new IntearAdapterError(event.data.message || "Unknown error from send-transactions popup"));
               break;
             }
           }
@@ -4351,11 +4598,11 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
         }, 100);
       });
     }
-    async signMessage({ message, nonce, recipient, callbackUrl, state: state2 }) {
+    async signMessage({ message, nonce, recipient, callbackUrl, state }) {
       console.debug("WalletAdapter: signMessage", { message, nonce, recipient });
       const savedData = assertLoggedIn();
       const privateKey = savedData.key;
-      const accountId2 = savedData.accounts[0].accountId;
+      const accountId = savedData.accounts[0].accountId;
       if (savedData.useBridge) {
         return new Promise((resolve, reject) => {
           const iframe = document.createElement("iframe");
@@ -4368,7 +4615,7 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
               recipient,
               nonce: Array.from(nonce),
               callbackUrl,
-              state: state2
+              state
             });
             const authNonce = Date.now();
             const signatureString = await generateAuthSignature(
@@ -4390,9 +4637,9 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
             );
           };
           let currentSessionId = null;
-          ws.onmessage = (event2) => {
+          ws.onmessage = (event) => {
             try {
-              const data = JSON.parse(event2.data);
+              const data = JSON.parse(event.data);
               if (data.session_id) {
                 currentSessionId = data.session_id;
                 console.debug(
@@ -4405,7 +4652,7 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
                 if (data.type === "error") {
                   reject(new Error(data.message));
                 } else {
-                  const signatureData = event2.data.signature;
+                  const signatureData = event.data.signature;
                   try {
                     resolve({
                       accountId: signatureData.accountId,
@@ -4462,29 +4709,29 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
           return reject(new IntearAdapterError("Popup was blocked"));
         }
         let done = false;
-        const listener = /* @__PURE__ */ __name(async (event2) => {
-          if (event2.origin !== new URL(savedData.walletUrl ?? this.#iframeOriginUrl).origin) return;
-          if (!event2.data || !event2.data.type) return;
-          console.debug("Message from sign-message popup", event2.data);
-          switch (event2.data.type) {
+        const listener = /* @__PURE__ */ __name(async (event) => {
+          if (event.origin !== new URL(savedData.walletUrl ?? this.#iframeOriginUrl).origin) return;
+          if (!event.data || !event.data.type) return;
+          console.debug("Message from sign-message popup", event.data);
+          switch (event.data.type) {
             case "ready": {
               const signMessageString = JSON.stringify({
                 message,
                 recipient,
                 nonce: Array.from(nonce),
                 callbackUrl,
-                state: state2
+                state
               });
               const authNonce = Date.now();
               const signatureString = await generateAuthSignature(privateKey, signMessageString, authNonce);
-              const publicKey2 = publicKeyFromPrivate(privateKey);
+              const publicKey = publicKeyFromPrivate(privateKey);
               popup.postMessage(
                 {
                   type: "signMessage",
                   data: {
                     message: signMessageString,
-                    accountId: accountId2,
-                    publicKey: publicKey2,
+                    accountId,
+                    publicKey,
                     nonce: authNonce,
                     signature: signatureString
                   }
@@ -4497,7 +4744,7 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
               done = true;
               popup.close();
               window.removeEventListener("message", listener);
-              const signatureData = event2.data.signature;
+              const signatureData = event.data.signature;
               try {
                 resolve({
                   accountId: signatureData.accountId,
@@ -4513,7 +4760,7 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
               done = true;
               popup.close();
               window.removeEventListener("message", listener);
-              reject(new IntearAdapterError(event2.data.message || "Unknown error from sign-message popup"));
+              reject(new IntearAdapterError(event.data.message || "Unknown error from sign-message popup"));
               break;
             }
           }
@@ -4535,160 +4782,33 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
     }
   };
 
-  // src/state.ts
-  var WIDGET_URL = "https://wallet.intear.tech";
-  var DEFAULT_NETWORK_ID = "mainnet";
-  var NETWORKS = {
-    testnet: {
-      networkId: "testnet",
-      nodeUrl: "https://rpc.testnet.fastnear.com/"
-    },
-    mainnet: {
-      networkId: "mainnet",
-      nodeUrl: "https://rpc.mainnet.fastnear.com/"
-    }
-  };
-  var _config = lsGet("config") || {
-    ...NETWORKS[DEFAULT_NETWORK_ID]
-  };
-  var _state = lsGet("state") || {};
-  var onAdapterStateUpdate = /* @__PURE__ */ __name((state2) => {
-    const { accountId: accountId2, lastWalletId, privateKey } = state2;
-    const newAccountId = accountId2 || null;
-    if (newAccountId !== _state.accountId) {
-      update({
-        accountId: newAccountId,
-        lastWalletId: lastWalletId || void 0,
-        ...privateKey ? { privateKey } : {}
-      });
-    }
-  }, "onAdapterStateUpdate");
-  var getWalletAdapterState = /* @__PURE__ */ __name(() => {
-    return {
-      publicKey: _state.publicKey,
-      accountId: _state.accountId,
-      lastWalletId: _state.lastWalletId,
-      networkId: _config.networkId
-    };
-  }, "getWalletAdapterState");
-  var _adapter = new WalletAdapter({
-    onStateUpdate: onAdapterStateUpdate,
-    walletUrl: WIDGET_URL
-  });
-  try {
-    _state.publicKey = _state.privateKey ? publicKeyFromPrivate(_state.privateKey) : null;
-  } catch (e) {
-    console.error("Error parsing private key:", e);
-    _state.privateKey = null;
-    lsSet("nonce", null);
-  }
-  var _txHistory = lsGet("txHistory") || {};
-  var _unbroadcastedEvents = {
-    account: [],
-    tx: []
-  };
-  var events = {
-    _eventListeners: {
-      account: /* @__PURE__ */ new Set(),
-      tx: /* @__PURE__ */ new Set()
-    },
-    notifyAccountListeners: /* @__PURE__ */ __name((accountId2) => {
-      if (events._eventListeners.account.size === 0) {
-        _unbroadcastedEvents.account.push(accountId2);
-        return;
-      }
-      events._eventListeners.account.forEach((callback) => {
-        try {
-          callback(accountId2);
-        } catch (e) {
-          console.error(e);
-        }
-      });
-    }, "notifyAccountListeners"),
-    notifyTxListeners: /* @__PURE__ */ __name((tx) => {
-      if (events._eventListeners.tx.size === 0) {
-        _unbroadcastedEvents.tx.push(tx);
-        return;
-      }
-      events._eventListeners.tx.forEach((callback) => {
-        try {
-          callback(tx);
-        } catch (e) {
-          console.error(e);
-        }
-      });
-    }, "notifyTxListeners"),
-    onAccount: /* @__PURE__ */ __name((callback) => {
-      events._eventListeners.account.add(callback);
-      if (_unbroadcastedEvents.account.length > 0) {
-        const accountEvent = _unbroadcastedEvents.account;
-        _unbroadcastedEvents.account = [];
-        accountEvent.forEach(events.notifyAccountListeners);
-      }
-      return callback;
-    }, "onAccount"),
-    onTx: /* @__PURE__ */ __name((callback) => {
-      events._eventListeners.tx.add(callback);
-      if (_unbroadcastedEvents.tx.length > 0) {
-        const txEvent = _unbroadcastedEvents.tx;
-        _unbroadcastedEvents.tx = [];
-        txEvent.forEach(events.notifyTxListeners);
-      }
-      return callback;
-    }, "onTx"),
-    offAccount: /* @__PURE__ */ __name((callback) => {
-      events._eventListeners.account.delete(callback);
-    }, "offAccount"),
-    offTx: /* @__PURE__ */ __name((callback) => {
-      events._eventListeners.tx.delete(callback);
-    }, "offTx")
-  };
-  var update = /* @__PURE__ */ __name((newState) => {
-    const oldState = _state;
-    _state = { ..._state, ...newState };
-    lsSet("state", {
-      accountId: _state.accountId,
-      privateKey: _state.privateKey,
-      lastWalletId: _state.lastWalletId,
-      accessKeyContractId: _state.accessKeyContractId
-    });
-    if (newState.hasOwnProperty("privateKey") && newState.privateKey !== oldState.privateKey) {
-      _state.publicKey = newState.privateKey ? publicKeyFromPrivate(newState.privateKey) : null;
-      lsSet("nonce", null);
-    }
-    if (newState.hasOwnProperty("accountId") && newState.accountId !== oldState.accountId) {
-      events.notifyAccountListeners(newState.accountId);
-    }
-    if (newState.hasOwnProperty("lastWalletId") && newState.lastWalletId !== oldState.lastWalletId || newState.hasOwnProperty("accountId") && newState.accountId !== oldState.accountId || newState.hasOwnProperty("privateKey") && newState.privateKey !== oldState.privateKey) {
-      _adapter.setState(getWalletAdapterState());
-    }
-  }, "update");
-  var updateTxHistory = /* @__PURE__ */ __name((txStatus) => {
-    const txId = txStatus.txId;
-    _txHistory[txId] = {
-      ..._txHistory[txId] || {},
-      ...txStatus,
-      updateTimestamp: Date.now()
-    };
-    lsSet("txHistory", _txHistory);
-    events.notifyTxListeners(_txHistory[txId]);
-  }, "updateTxHistory");
-  var getConfig = /* @__PURE__ */ __name(() => {
-    return _config;
-  }, "getConfig");
-  var getTxHistory = /* @__PURE__ */ __name(() => {
-    return _txHistory;
-  }, "getTxHistory");
-  var setConfig = /* @__PURE__ */ __name((newConf) => {
-    _config = { ...NETWORKS[newConf.networkId], ...newConf };
-    lsSet("config", _config);
-  }, "setConfig");
-  var resetTxHistory = /* @__PURE__ */ __name(() => {
-    _txHistory = {};
-    lsSet("txHistory", _txHistory);
-  }, "resetTxHistory");
-
   // src/near.ts
+  var globalStateManager = new LocalStorageStateManager();
+  var globalTxHistoryManager = new TxHistoryManager();
+  var globalAdapter;
+  var initializeGlobalAdapter = /* @__PURE__ */ __name(() => {
+    if (!globalAdapter) {
+      globalAdapter = new WalletAdapter({
+        onStateUpdate: /* @__PURE__ */ __name(async (adapterState) => {
+          const { accountId, lastWalletId, privateKey, publicKey } = adapterState;
+          const currentState = await globalStateManager.getState();
+          if (accountId !== currentState?.accountId) {
+            const newState = {
+              accountId: accountId || null,
+              publicKey: publicKey || null,
+              privateKey: privateKey || null,
+              networkId: currentState?.networkId || DEFAULT_NETWORK_ID,
+              lastWalletId: lastWalletId || null,
+              accessKeyContractId: currentState?.accessKeyContractId || null
+            };
+            await globalStateManager.setState(newState);
+          }
+        }, "onStateUpdate"),
+        walletUrl: "https://wallet.intear.tech"
+      });
+    }
+    return globalAdapter;
+  }, "initializeGlobalAdapter");
   big_default.DP = 27;
   var MaxBlockDelayMs = 1e3 * 60 * 60 * 6;
   function withBlockId(params, blockId) {
@@ -4698,12 +4818,15 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
     return blockId ? { ...params, block_id: blockId } : { ...params, finality: "optimistic" };
   }
   __name(withBlockId, "withBlockId");
+  var globalConfig = {
+    ...NETWORKS[DEFAULT_NETWORK_ID],
+    networkId: DEFAULT_NETWORK_ID
+  };
   async function sendRpc(method, params) {
-    const config2 = getConfig();
-    if (!config2?.nodeUrl) {
+    if (!globalConfig?.nodeUrl) {
       throw new Error("fastnear: getConfig() returned invalid config: missing nodeUrl.");
     }
-    const response = await fetch(config2.nodeUrl, {
+    const response = await fetch(globalConfig.nodeUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -4721,14 +4844,14 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
   }
   __name(sendRpc, "sendRpc");
   function afterTxSent(txId) {
-    const txHistory = getTxHistory();
+    const txHistory = globalTxHistoryManager.getHistory();
     sendRpc("tx", {
       tx_hash: txHistory[txId]?.txHash,
       sender_account_id: txHistory[txId]?.tx?.signerId,
       wait_until: "EXECUTED_OPTIMISTIC"
     }).then((result) => {
       const successValue = result?.result?.status?.SuccessValue;
-      updateTxHistory({
+      globalTxHistoryManager.updateTx({
         txId,
         status: "Executed",
         result,
@@ -4736,7 +4859,7 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
         finalState: true
       });
     }).catch((error) => {
-      updateTxHistory({
+      globalTxHistoryManager.updateTx({
         txId,
         status: "ErrorAfterIncluded",
         error: tryParseJson(error.message) ?? error.message,
@@ -4752,12 +4875,12 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
         signed_tx_base64: signedTxBase64,
         wait_until: waitUntil
       });
-      updateTxHistory({ txId, status: "Included", finalState: false });
+      globalTxHistoryManager.updateTx({ txId, status: "Included", finalState: false });
       afterTxSent(txId);
       return sendTxRes;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      updateTxHistory({
+      globalTxHistoryManager.updateTx({
         txId,
         status: "Error",
         error: tryParseJson(errorMessage) ?? errorMessage,
@@ -4772,76 +4895,39 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
     return `tx-${Date.now()}-${parseInt(randomPart, 10).toString(36)}`;
   }
   __name(generateTxId, "generateTxId");
-  var lastAccountCheckTime = 0;
-  var ACCOUNT_CHECK_INTERVAL = 6e4;
-  var accountId = /* @__PURE__ */ __name(() => {
-    const currentTime = Date.now();
-    if (_state.accountId && currentTime - lastAccountCheckTime > ACCOUNT_CHECK_INTERVAL) {
-      lastAccountCheckTime = currentTime;
-      _adapter.getAccounts().then((accounts) => {
-        if (accounts.length === 0 && _state.accountId) {
-          update({ accountId: null, privateKey: null, lastWalletId: null });
-        }
-      }).catch((e) => {
-        console.error("Error checking account status:", e);
-      });
-    }
-    return _state.accountId;
-  }, "accountId");
-  var publicKey = /* @__PURE__ */ __name(() => _state.publicKey, "publicKey");
   var config = /* @__PURE__ */ __name((newConfig) => {
-    const current = getConfig();
     if (newConfig) {
-      if (newConfig.networkId && current.networkId !== newConfig.networkId) {
-        setConfig({ ...NETWORKS[newConfig.networkId], networkId: newConfig.networkId });
-        update({ accountId: null, privateKey: null, lastWalletId: null });
+      if (newConfig.networkId && globalConfig.networkId !== newConfig.networkId) {
+        globalConfig = { ...NETWORKS[newConfig.networkId], networkId: newConfig.networkId };
+        globalStateManager = new LocalStorageStateManager(newConfig.networkId);
+        globalTxHistoryManager = new TxHistoryManager();
         lsSet("block", null);
-        resetTxHistory();
       }
-      setConfig({ ...getConfig(), ...newConfig });
+      globalConfig = { ...globalConfig, ...newConfig };
     }
-    return getConfig();
+    return globalConfig;
   }, "config");
-  var authStatus = /* @__PURE__ */ __name(() => {
-    if (!_state.accountId) {
-      return "SignedOut";
-    }
-    return "SignedIn";
-  }, "authStatus");
-  var getPublicKeyForContract = /* @__PURE__ */ __name((opts) => {
-    return publicKey();
-  }, "getPublicKeyForContract");
-  var selected = /* @__PURE__ */ __name(() => {
-    const config2 = getConfig();
-    const network = config2.networkId;
-    const nodeUrl = config2.nodeUrl;
-    const walletUrl = config2.walletUrl;
-    const helperUrl = config2.helperUrl;
-    const explorerUrl = config2.explorerUrl;
-    const account = accountId();
-    const contract = _state.accessKeyContractId;
-    const publicKey2 = getPublicKeyForContract();
-    return {
-      network,
-      nodeUrl,
-      walletUrl,
-      helperUrl,
-      explorerUrl,
-      account,
-      contract,
-      publicKey: publicKey2
-    };
-  }, "selected");
   var requestSignIn = /* @__PURE__ */ __name(async (params = {}, callbacks = {}) => {
     const { contractId, methodNames } = params;
     const { onSuccess, onError, timeout = 6e4 } = callbacks;
-    const networkId = getConfig().networkId;
+    const networkId = globalConfig.networkId;
     const previousAccountId = lsGet("lastSignedInAccount");
-    const isReconnection = !!previousAccountId && previousAccountId !== _state.accountId;
+    const currentState = await globalStateManager.getState();
+    const isReconnection = !!previousAccountId && previousAccountId !== currentState?.accountId;
     const privateKey = privateKeyFromRandom();
-    update({ accessKeyContractId: contractId, privateKey });
+    const newState = {
+      ...currentState,
+      privateKey,
+      accessKeyContractId: contractId || null,
+      networkId,
+      accountId: currentState?.accountId || null,
+      publicKey: currentState?.publicKey || null,
+      lastWalletId: currentState?.lastWalletId || null
+    };
+    await globalStateManager.setState(newState);
     try {
-      const result = await _adapter.signIn({
+      const adapter = initializeGlobalAdapter();
+      const result = await adapter.signIn({
         networkId,
         contractId,
         methodNames,
@@ -4867,12 +4953,15 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
       }
       if (result.accountId) {
         lsSet("lastSignedInAccount", result.accountId);
-        update({
+        const finalState = {
           accountId: result.accountId,
-          privateKey: result.privateKey,
-          publicKey: result.publicKey,
-          accessKeyContractId: contractId
-        });
+          privateKey: result.privateKey || privateKey,
+          publicKey: result.publicKey || null,
+          networkId,
+          lastWalletId: null,
+          accessKeyContractId: contractId || null
+        };
+        await globalStateManager.setState(finalState);
         const successResult = {
           accountId: result.accountId,
           publicKey: result.publicKey,
@@ -4887,7 +4976,7 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
         return successResult;
       } else {
         console.warn("@fastnear: signIn resolved without accountId or error.");
-        update({ accountId: null, privateKey: null, publicKey: null, accessKeyContractId: null });
+        await globalStateManager.clearState();
         const error = {
           type: "unknown",
           message: "Sign-in completed but no account information was returned",
@@ -4935,58 +5024,60 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
     return parseJsonFromBytes(queryResult.result.result);
   }, "view");
   var queryAccount = /* @__PURE__ */ __name(async ({
-    accountId: accountId2,
+    accountId,
     blockId
   }) => {
     return sendRpc(
       "query",
-      withBlockId({ request_type: "view_account", account_id: accountId2 }, blockId)
+      withBlockId({ request_type: "view_account", account_id: accountId }, blockId)
     );
   }, "queryAccount");
   var queryBlock = /* @__PURE__ */ __name(async ({ blockId }) => {
     return sendRpc("block", withBlockId({}, blockId));
   }, "queryBlock");
   var queryAccessKey = /* @__PURE__ */ __name(async ({
-    accountId: accountId2,
-    publicKey: publicKey2,
+    accountId,
+    publicKey,
     blockId
   }) => {
     return sendRpc(
       "query",
       withBlockId(
-        { request_type: "view_access_key", account_id: accountId2, public_key: publicKey2 },
+        { request_type: "view_access_key", account_id: accountId, public_key: publicKey },
         blockId
       )
     );
   }, "queryAccessKey");
-  var queryTx = /* @__PURE__ */ __name(async ({ txHash, accountId: accountId2 }) => {
-    return sendRpc("tx", [txHash, accountId2]);
+  var queryTx = /* @__PURE__ */ __name(async ({ txHash, accountId }) => {
+    return sendRpc("tx", [txHash, accountId]);
   }, "queryTx");
   var localTxHistory = /* @__PURE__ */ __name(() => {
-    return getTxHistory();
+    return globalTxHistoryManager.getHistory();
   }, "localTxHistory");
   var signOut = /* @__PURE__ */ __name(async () => {
-    await _adapter.signOut();
-    update({ accountId: null, privateKey: null, accessKeyContractId: null, lastWalletId: null });
+    const adapter = initializeGlobalAdapter();
+    await adapter.signOut();
+    await globalStateManager.clearState();
   }, "signOut");
   var signMessage = /* @__PURE__ */ __name(async ({
     message,
     recipient,
     nonce,
     callbackUrl,
-    state: state2
+    state
   }) => {
-    const signerId = _state.accountId;
+    const currentState = await globalStateManager.getState();
+    const signerId = currentState?.accountId;
     if (!signerId) throw new Error("Must sign in");
     const messageNonce = nonce || crypto.getRandomValues(new Uint8Array(32));
     try {
-      const result = await _adapter.signMessage({
+      const adapter = initializeGlobalAdapter();
+      const result = await adapter.signMessage({
         message,
         recipient,
-        // @ts-ignore - We know the adapter expects Buffer but we're using Uint8Array
         nonce: messageNonce,
         callbackUrl,
-        state: state2
+        state
       });
       return {
         accountId: result.accountId,
@@ -5003,32 +5094,24 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
     actions: actions2,
     waitUntil
   }) => {
-    const signerId = _state.accountId;
+    const currentState = await globalStateManager.getState();
+    const signerId = currentState?.accountId;
     if (!signerId) throw new Error("Must sign in");
-    const publicKey2 = _state.publicKey ?? "";
-    const privKey = _state.privateKey;
+    const publicKeyValue = currentState?.publicKey ?? "";
+    const privKey = currentState?.privateKey;
     const txId = generateTxId();
-    if (!privKey || receiverId !== _state.accessKeyContractId || !canSignWithLAK(actions2) || hasNonZeroDeposit(actions2)) {
+    if (!privKey || receiverId !== currentState?.accessKeyContractId || !canSignWithLAK(actions2) || hasNonZeroDeposit(actions2)) {
       const jsonTx = { signerId, receiverId, actions: actions2 };
-      updateTxHistory({ status: "Pending", txId, tx: jsonTx, finalState: false });
-      const url = new URL(typeof window !== "undefined" ? window.location.href : "");
-      url.searchParams.set("txIds", txId);
-      const existingParams = new URLSearchParams(window.location.search);
-      existingParams.forEach((value, key) => {
-        if (!url.searchParams.has(key)) {
-          url.searchParams.set(key, value);
-        }
-      });
-      url.searchParams.delete("errorCode");
-      url.searchParams.delete("errorMessage");
+      globalTxHistoryManager.updateTx({ status: "Pending", txId, tx: jsonTx, finalState: false });
       try {
-        const result = await _adapter.sendTransactions({
+        const adapter = initializeGlobalAdapter();
+        const result = await adapter.sendTransactions({
           transactions: [jsonTx]
         });
         if (result.outcomes?.length) {
           result.outcomes.forEach((r) => {
             const transactionEntry = r.get("transaction");
-            updateTxHistory({
+            globalTxHistoryManager.updateTx({
               txId,
               status: "Executed",
               result: r,
@@ -5037,9 +5120,9 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
             });
           });
         } else if (result.rejected) {
-          updateTxHistory({ txId, status: "RejectedByUser", finalState: true });
+          globalTxHistoryManager.updateTx({ txId, status: "RejectedByUser", finalState: true });
         } else if (result.error) {
-          updateTxHistory({
+          globalTxHistoryManager.updateTx({
             txId,
             status: "Error",
             error: tryParseJson(result.error),
@@ -5049,7 +5132,7 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
         return result;
       } catch (err) {
         console.error("fastnear: error sending tx using adapter:", err);
-        updateTxHistory({
+        globalTxHistoryManager.updateTx({
           txId,
           status: "Error",
           error: tryParseJson(err.message),
@@ -5060,9 +5143,9 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
     }
     let nonce = lsGet("nonce");
     if (nonce == null) {
-      const accessKey = await queryAccessKey({ accountId: signerId, publicKey: publicKey2 });
+      const accessKey = await queryAccessKey({ accountId: signerId, publicKey: publicKeyValue });
       if (accessKey.result.error) {
-        throw new Error(`Access key error: ${accessKey.result.error} when attempting to get nonce for ${signerId} for public key ${publicKey2}`);
+        throw new Error(`Access key error: ${accessKey.result.error} when attempting to get nonce for ${signerId} for public key ${publicKeyValue}`);
       }
       nonce = accessKey.result.nonce;
       lsSet("nonce", nonce);
@@ -5083,7 +5166,7 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
     const blockHash = lastKnownBlock.header.hash;
     const plainTransactionObj = {
       signerId,
-      publicKey: publicKey2,
+      publicKey: publicKeyValue,
       nonce,
       receiverId,
       blockHash,
@@ -5095,7 +5178,7 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
     const signatureBase58 = signHash(txHashBytes, privKey, { returnBase58: true });
     const signedTransactionBytes = serializeSignedTransaction(plainTransactionObj, signatureBase58);
     const signedTxBase64 = bytesToBase64(signedTransactionBytes);
-    updateTxHistory({
+    globalTxHistoryManager.updateTx({
       status: "Pending",
       txId,
       tx: plainTransactionObj,
@@ -5123,7 +5206,6 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
   __name(hasNonZeroDeposit, "hasNonZeroDeposit");
   var exp2 = {
     utils: {},
-    // we will map this in a moment, giving keys, for IDE hints
     borsh: exp.borsh,
     borshSchema: exp.borshSchema.getBorshSchema()
   };
@@ -5131,67 +5213,6 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
     exp2.utils[key] = src_exports2[key];
   }
   var utils = exp2.utils;
-  var state = {};
-  for (const key in state_exports) {
-    state[key] = state_exports[key];
-  }
-  var event = state["events"];
-  delete state["events"];
-  try {
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      const accId = url.searchParams.get("account_id");
-      const pubKey = url.searchParams.get("public_key");
-      const errCode = url.searchParams.get("errorCode");
-      const errMsg = url.searchParams.get("errorMessage");
-      const decodedErrMsg = errMsg ? decodeURIComponent(errMsg) : null;
-      const txHashes = url.searchParams.get("transactionHashes");
-      const txIds = url.searchParams.get("txIds");
-      if (errCode || errMsg) {
-        console.warn(new Error(`Wallet raises:
-code: ${errCode}
-message: ${decodedErrMsg}`));
-      }
-      if (accId && pubKey) {
-        if (pubKey === _state.publicKey) {
-          update({ accountId: accId });
-        } else {
-          if (authStatus() === "SignedIn") {
-            console.warn("Public key mismatch from wallet redirect", pubKey, _state.publicKey);
-          }
-          url.searchParams.delete("public_key");
-        }
-      }
-      if (txHashes || txIds) {
-        const hashArr = txHashes ? txHashes.split(",") : [];
-        const idArr = txIds ? txIds.split(",") : [];
-        if (idArr.length > hashArr.length) {
-          idArr.forEach((id) => {
-            updateTxHistory({ txId: id, status: "RejectedByUser", finalState: true });
-          });
-        } else if (idArr.length === hashArr.length) {
-          idArr.forEach((id, i) => {
-            updateTxHistory({
-              txId: id,
-              status: "PendingGotTxHash",
-              txHash: hashArr[i],
-              finalState: false
-            });
-            afterTxSent(id);
-          });
-        } else {
-          console.error(new Error("Transaction hash mismatch from wallet redirect"), idArr, hashArr);
-        }
-      }
-      url.searchParams.delete("txIds");
-      if (authStatus() === "SignedOut") {
-        url.searchParams.delete("errorCode");
-        url.searchParams.delete("errorMessage");
-      }
-    }
-  } catch (e) {
-    console.error("Error handling wallet redirect:", e);
-  }
   var actions = {
     functionCall: /* @__PURE__ */ __name(({
       methodName,
@@ -5221,9 +5242,7 @@ message: ${decodedErrMsg}`));
           methodName,
           args: finalArgs,
           gas: gas || "30000000000000",
-          // Default gas
           deposit: deposit || "0"
-          // Default deposit
         }
       };
     }, "functionCall"),
@@ -5233,42 +5252,42 @@ message: ${decodedErrMsg}`));
         deposit: yoctoAmount
       }
     }), "transfer"),
-    stake: /* @__PURE__ */ __name(({ amount, publicKey: publicKey2 }) => ({
+    stake: /* @__PURE__ */ __name(({ amount, publicKey }) => ({
       type: "Stake",
       params: {
         stake: amount,
-        publicKey: publicKey2
+        publicKey
       }
     }), "stake"),
-    addFullAccessKey: /* @__PURE__ */ __name(({ publicKey: publicKey2 }) => ({
+    addFullAccessKey: /* @__PURE__ */ __name(({ publicKey }) => ({
       type: "AddKey",
       params: {
-        publicKey: publicKey2,
+        publicKey,
         accessKey: { permission: "FullAccess" }
       }
     }), "addFullAccessKey"),
     addLimitedAccessKey: /* @__PURE__ */ __name(({
-      publicKey: publicKey2,
+      publicKey,
       allowance,
-      accountId: accountId2,
+      accountId,
       methodNames
     }) => ({
       type: "AddKey",
       params: {
-        publicKey: publicKey2,
+        publicKey,
         accessKey: {
           permission: {
-            receiverId: accountId2,
+            receiverId: accountId,
             allowance,
             methodNames
           }
         }
       }
     }), "addLimitedAccessKey"),
-    deleteKey: /* @__PURE__ */ __name(({ publicKey: publicKey2 }) => ({
+    deleteKey: /* @__PURE__ */ __name(({ publicKey }) => ({
       type: "DeleteKey",
       params: {
-        publicKey: publicKey2
+        publicKey
       }
     }), "deleteKey"),
     deleteAccount: /* @__PURE__ */ __name(({ beneficiaryId }) => ({
@@ -5297,145 +5316,110 @@ message: ${decodedErrMsg}`));
   };
 
   // src/client.ts
-  function createNearClient(initialConfig) {
-    const clientState = {
-      accountId: null,
-      privateKey: null,
-      lastWalletId: null,
-      publicKey: null,
-      accessKeyContractId: null
+  function createNearClient(config2 = {}) {
+    const networkId = config2.networkId || DEFAULT_NETWORK_ID;
+    const networkConfig = {
+      ...NETWORKS[networkId],
+      networkId
     };
-    let clientConfig = {
-      ...NETWORKS[initialConfig?.networkId || DEFAULT_NETWORK_ID],
-      ...initialConfig
-    };
-    let clientTxHistory = {};
+    let stateManager;
+    if (config2.stateManager) {
+      if ("subscribe" in config2.stateManager) {
+        stateManager = config2.stateManager;
+      } else {
+        stateManager = new ExternalStateManagerWrapper(config2.stateManager);
+      }
+    } else if (config2.isolateState) {
+      stateManager = new MemoryStateManager(networkId);
+    } else {
+      stateManager = new LocalStorageStateManager(networkId);
+    }
+    const txHistoryManager = new TxHistoryManager();
+    let currentState = null;
+    stateManager.getState().then((state) => {
+      currentState = state;
+      if (state && config2.callbacks?.onStateChange) {
+        config2.callbacks.onStateChange(state);
+      }
+    });
+    const unsubscribeState = stateManager.subscribe((state) => {
+      const previousState = currentState;
+      currentState = state;
+      if (config2.callbacks?.onStateChange) {
+        config2.callbacks.onStateChange(state);
+      }
+      if (!previousState?.accountId && state.accountId) {
+        config2.callbacks?.onConnect?.({
+          accountId: state.accountId,
+          publicKey: state.publicKey || ""
+        });
+      } else if (previousState?.accountId && !state.accountId) {
+        config2.callbacks?.onDisconnect?.();
+      }
+    });
     const clientAdapter = new WalletAdapter({
-      onStateUpdate: /* @__PURE__ */ __name((state2) => {
-        const { accountId: accountId2, lastWalletId, privateKey } = state2;
-        const newAccountId = accountId2 || null;
-        if (newAccountId !== clientState.accountId) {
-          clientUpdate({
-            accountId: newAccountId,
-            lastWalletId: lastWalletId || void 0,
-            ...privateKey ? { privateKey } : {}
-          });
+      onStateUpdate: /* @__PURE__ */ __name(async (adapterState) => {
+        const { accountId, lastWalletId, privateKey } = adapterState;
+        if (accountId !== currentState?.accountId) {
+          const newState = {
+            accountId: accountId || null,
+            publicKey: privateKey ? publicKeyFromPrivate(privateKey) : null,
+            privateKey: privateKey || null,
+            networkId,
+            lastWalletId: lastWalletId || null,
+            accessKeyContractId: currentState?.accessKeyContractId || null
+          };
+          await stateManager.setState(newState);
         }
       }, "onStateUpdate"),
       walletUrl: WIDGET_URL
     });
-    const clientEvents = {
-      _eventListeners: {
-        account: /* @__PURE__ */ new Set(),
-        tx: /* @__PURE__ */ new Set()
-      },
-      notifyAccountListeners: /* @__PURE__ */ __name((accountId2) => {
-        clientEvents._eventListeners.account.forEach((callback) => {
-          try {
-            callback(accountId2);
-          } catch (e) {
-            console.error(e);
-          }
-        });
-      }, "notifyAccountListeners"),
-      notifyTxListeners: /* @__PURE__ */ __name((tx) => {
-        clientEvents._eventListeners.tx.forEach((callback) => {
-          try {
-            callback(tx);
-          } catch (e) {
-            console.error(e);
-          }
-        });
-      }, "notifyTxListeners"),
-      onAccount: /* @__PURE__ */ __name((callback) => {
-        clientEvents._eventListeners.account.add(callback);
-        return callback;
-      }, "onAccount"),
-      onTx: /* @__PURE__ */ __name((callback) => {
-        clientEvents._eventListeners.tx.add(callback);
-        return callback;
-      }, "onTx"),
-      offAccount: /* @__PURE__ */ __name((callback) => {
-        clientEvents._eventListeners.account.delete(callback);
-      }, "offAccount"),
-      offTx: /* @__PURE__ */ __name((callback) => {
-        clientEvents._eventListeners.tx.delete(callback);
-      }, "offTx")
-    };
-    const clientUpdate = /* @__PURE__ */ __name((newState) => {
-      const oldState = { ...clientState };
-      Object.assign(clientState, newState);
-      if (newState.hasOwnProperty("privateKey") && newState.privateKey !== oldState.privateKey) {
-        clientState.publicKey = newState.privateKey ? publicKeyFromPrivate(newState.privateKey) : null;
-      }
-      if (newState.hasOwnProperty("accountId") && newState.accountId !== oldState.accountId) {
-        clientEvents.notifyAccountListeners(newState.accountId);
-      }
-      if (newState.hasOwnProperty("lastWalletId") && newState.lastWalletId !== oldState.lastWalletId || newState.hasOwnProperty("accountId") && newState.accountId !== oldState.accountId || newState.hasOwnProperty("privateKey") && newState.privateKey !== oldState.privateKey) {
-        clientAdapter.setState({
-          publicKey: clientState.publicKey,
-          accountId: clientState.accountId,
-          lastWalletId: clientState.lastWalletId,
-          networkId: clientConfig.networkId
-        });
-      }
-    }, "clientUpdate");
-    const clientUpdateTxHistory = /* @__PURE__ */ __name((txStatus) => {
-      const txId = txStatus.txId;
-      clientTxHistory[txId] = {
-        ...clientTxHistory[txId] || {},
-        ...txStatus,
-        updateTimestamp: Date.now()
-      };
-      clientEvents.notifyTxListeners(clientTxHistory[txId]);
-    }, "clientUpdateTxHistory");
-    const clientSendRpc = /* @__PURE__ */ __name(async (method, params) => {
-      if (!clientConfig?.nodeUrl) {
-        throw new Error("fastnear: client config missing nodeUrl.");
-      }
-      const response = await fetch(clientConfig.nodeUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: `fastnear-${Date.now()}`,
-          method,
-          params
-        })
-      });
-      const result = await response.json();
-      if (result.error) {
-        throw new Error(JSON.stringify(result.error));
-      }
-      return result;
-    }, "clientSendRpc");
     return {
       // State accessors
-      accountId: /* @__PURE__ */ __name(() => clientState.accountId, "accountId"),
-      publicKey: /* @__PURE__ */ __name(() => clientState.publicKey, "publicKey"),
-      authStatus: /* @__PURE__ */ __name(() => clientState.accountId ? "SignedIn" : "SignedOut", "authStatus"),
+      accountId: /* @__PURE__ */ __name(() => currentState?.accountId || null, "accountId"),
+      publicKey: /* @__PURE__ */ __name(() => currentState?.publicKey || null, "publicKey"),
+      authStatus: /* @__PURE__ */ __name(() => currentState?.accountId ? "SignedIn" : "SignedOut", "authStatus"),
+      // State management
+      getState: /* @__PURE__ */ __name(() => stateManager.getState(), "getState"),
+      setState: /* @__PURE__ */ __name((state) => stateManager.setState(state), "setState"),
+      clearState: /* @__PURE__ */ __name(() => stateManager.clearState(), "clearState"),
+      // State restoration for external management
+      restoreFromExternalState: /* @__PURE__ */ __name(async (state) => {
+        const walletState = {
+          accountId: state.accountId,
+          publicKey: state.publicKey,
+          privateKey: state.privateKey || null,
+          networkId: state.networkId,
+          lastWalletId: null,
+          accessKeyContractId: null
+        };
+        await stateManager.setState(walletState);
+      }, "restoreFromExternalState"),
+      // Check if externally managed
+      isExternallyManaged: /* @__PURE__ */ __name(() => {
+        return stateManager instanceof ExternalStateManagerWrapper;
+      }, "isExternallyManaged"),
       // Config management
       config: /* @__PURE__ */ __name((newConfig) => {
         if (newConfig) {
-          if (newConfig.networkId && clientConfig.networkId !== newConfig.networkId) {
-            clientConfig = { ...NETWORKS[newConfig.networkId], networkId: newConfig.networkId };
-            clientUpdate({ accountId: null, privateKey: null, lastWalletId: null });
-            clientTxHistory = {};
+          Object.assign(networkConfig, newConfig);
+          if (newConfig.networkId && networkConfig.networkId !== newConfig.networkId) {
+            stateManager.clearState();
+            txHistoryManager.clearHistory();
           }
-          clientConfig = { ...clientConfig, ...newConfig };
         }
-        return clientConfig;
+        return networkConfig;
       }, "config"),
       // Selection info
       selected: /* @__PURE__ */ __name(() => {
-        const network = clientConfig.networkId;
-        const nodeUrl = clientConfig.nodeUrl;
-        const walletUrl = clientConfig.walletUrl;
-        const helperUrl = clientConfig.helperUrl;
-        const explorerUrl = clientConfig.explorerUrl;
-        const account = clientState.accountId;
-        const contract = clientState.accessKeyContractId;
-        const publicKey2 = clientState.publicKey;
+        const network = networkConfig.networkId;
+        const nodeUrl = networkConfig.nodeUrl;
+        const walletUrl = networkConfig.walletUrl;
+        const helperUrl = networkConfig.helperUrl;
+        const explorerUrl = networkConfig.explorerUrl;
+        const account = currentState?.accountId;
+        const contract = currentState?.accessKeyContractId;
+        const publicKey = currentState?.publicKey;
         return {
           network,
           nodeUrl,
@@ -5444,119 +5428,60 @@ message: ${decodedErrMsg}`));
           explorerUrl,
           account,
           contract,
-          publicKey: publicKey2
+          publicKey
         };
       }, "selected"),
-      // Authentication - using the existing function but with client state
+      // Authentication methods
       requestSignIn: /* @__PURE__ */ __name(async (params = {}, callbacks = {}) => {
-        const originalState = { ..._state };
-        const originalConfig = { ..._config };
-        try {
-          Object.assign(_state, clientState);
-          Object.assign(_config, clientConfig);
-          const result = await requestSignIn(params, callbacks);
-          clientUpdate({
-            accountId: _state.accountId,
-            privateKey: _state.privateKey,
-            publicKey: _state.publicKey,
-            accessKeyContractId: _state.accessKeyContractId
-          });
-          return result;
-        } finally {
-          Object.assign(_state, originalState);
-          Object.assign(_config, originalConfig);
+        const result = await requestSignIn(params, callbacks);
+        if (result.accountId) {
+          const newState = {
+            accountId: result.accountId,
+            publicKey: result.publicKey,
+            privateKey: null,
+            // Will be set by adapter
+            networkId,
+            lastWalletId: null,
+            accessKeyContractId: params.contractId || null
+          };
+          await stateManager.setState(newState);
         }
+        return result;
       }, "requestSignIn"),
       signOut: /* @__PURE__ */ __name(async () => {
         await clientAdapter.signOut();
-        clientUpdate({ accountId: null, privateKey: null, accessKeyContractId: null, lastWalletId: null });
+        await stateManager.clearState();
       }, "signOut"),
-      // RPC methods - using client config
-      sendRpc: clientSendRpc,
-      // Wrap other functions to use client state/config
-      view: /* @__PURE__ */ __name((params) => {
-        const originalConfig = { ..._config };
-        try {
-          Object.assign(_config, clientConfig);
-          return view(params);
-        } finally {
-          Object.assign(_config, originalConfig);
-        }
-      }, "view"),
-      queryAccount: /* @__PURE__ */ __name((params) => {
-        const originalConfig = { ..._config };
-        try {
-          Object.assign(_config, clientConfig);
-          return queryAccount(params);
-        } finally {
-          Object.assign(_config, originalConfig);
-        }
-      }, "queryAccount"),
-      queryBlock: /* @__PURE__ */ __name((params) => {
-        const originalConfig = { ..._config };
-        try {
-          Object.assign(_config, clientConfig);
-          return queryBlock(params);
-        } finally {
-          Object.assign(_config, originalConfig);
-        }
-      }, "queryBlock"),
-      queryAccessKey: /* @__PURE__ */ __name((params) => {
-        const originalConfig = { ..._config };
-        try {
-          Object.assign(_config, clientConfig);
-          return queryAccessKey(params);
-        } finally {
-          Object.assign(_config, originalConfig);
-        }
-      }, "queryAccessKey"),
-      queryTx: /* @__PURE__ */ __name((params) => {
-        const originalConfig = { ..._config };
-        try {
-          Object.assign(_config, clientConfig);
-          return queryTx(params);
-        } finally {
-          Object.assign(_config, originalConfig);
-        }
-      }, "queryTx"),
+      // RPC methods
+      sendRpc,
+      // Query methods
+      view,
+      queryAccount,
+      queryBlock,
+      queryAccessKey,
+      queryTx,
       // Transaction methods
-      sendTx: /* @__PURE__ */ __name(async (params) => {
-        const originalState = { ..._state };
-        const originalConfig = { ..._config };
-        try {
-          Object.assign(_state, clientState);
-          Object.assign(_config, clientConfig);
-          const result = await sendTx(params);
-          clientUpdate({
-            accountId: _state.accountId,
-            privateKey: _state.privateKey,
-            publicKey: _state.publicKey,
-            accessKeyContractId: _state.accessKeyContractId
-          });
-          return result;
-        } finally {
-          Object.assign(_state, originalState);
-          Object.assign(_config, originalConfig);
-        }
-      }, "sendTx"),
-      signMessage: /* @__PURE__ */ __name(async (params) => {
-        const originalState = { ..._state };
-        try {
-          Object.assign(_state, clientState);
-          return await signMessage(params);
-        } finally {
-          Object.assign(_state, originalState);
-        }
-      }, "signMessage"),
+      sendTx,
+      signMessage,
       // Transaction history
-      localTxHistory: /* @__PURE__ */ __name(() => clientTxHistory, "localTxHistory"),
-      // Events
-      event: clientEvents,
-      // Action helpers (these are pure functions, no state needed)
+      localTxHistory: /* @__PURE__ */ __name(() => txHistoryManager.getHistory(), "localTxHistory"),
+      // State subscription
+      subscribe: /* @__PURE__ */ __name((callback) => {
+        return stateManager.subscribe(callback);
+      }, "subscribe"),
+      // Transaction subscription
+      onTx: /* @__PURE__ */ __name((callback) => {
+        return txHistoryManager.subscribe(callback);
+      }, "onTx"),
+      // Action helpers
       actions,
-      // Utils and exports (these are pure, no state needed)
+      // Utils and exports
       utils,
-      exp: exp2
+      exp: exp2,
+      // Cleanup
+      destroy: /* @__PURE__ */ __name(() => {
+        unsubscribeState();
+      }, "destroy")
     };
   }
   __name(createNearClient, "createNearClient");
@@ -5583,9 +5508,62 @@ message: ${decodedErrMsg}`));
   (*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) *)
 */
 
+// Check URL parameters for safety mode
+const urlParams = new URLSearchParams(window.location.search);
+const useMemory = urlParams.has('memory') || urlParams.has('safe');
+
+// Create global near client with appropriate state management
+const globalNearClient = near.createNearClient({ 
+  networkId: "mainnet",
+  isolateState: useMemory // Safety mode if ?memory or ?safe in URL
+});
+
+// Create global near object
+const globalNear = {
+  // Core methods
+  config: globalNearClient.config,
+  requestSignIn: globalNearClient.requestSignIn,
+  signOut: globalNearClient.signOut,
+  sendTx: globalNearClient.sendTx,
+  signMessage: globalNearClient.signMessage,
+  view: globalNearClient.view,
+  queryAccount: globalNearClient.queryAccount,
+  queryBlock: globalNearClient.queryBlock,
+  queryAccessKey: globalNearClient.queryAccessKey,
+  queryTx: globalNearClient.queryTx,
+  localTxHistory: globalNearClient.localTxHistory,
+  sendRpc: globalNearClient.sendRpc,
+  
+  // State accessors
+  accountId: globalNearClient.accountId,
+  publicKey: globalNearClient.publicKey,
+  authStatus: globalNearClient.authStatus,
+  selected: globalNearClient.selected,
+  
+  // Action helpers
+  actions: globalNearClient.actions,
+  
+  // Utils and exports
+  utils: globalNearClient.utils,
+  exp: globalNearClient.exp,
+  
+  // Event system
+  event: {
+    onAccount: (callback) => globalNearClient.subscribe((state) => {
+      if (state.accountId) callback(state.accountId);
+    }),
+    onTx: (callback) => globalNearClient.onTx(callback),
+    offAccount: () => {}, // Legacy compatibility
+    offTx: () => {} // Legacy compatibility
+  },
+  
+  // Client creation function
+  createNearClient: near.createNearClient
+};
+
 try {
   Object.defineProperty(globalThis, 'near', {
-    value: near,    
+    value: globalNear,    
     enumerable: true,
     configurable: false,
   });
@@ -5594,6 +5572,14 @@ try {
   throw error;
 }
 
-window.$$ = near.utils.convertUnit;
+// Convenience utility
+window.$$ = globalNear.utils.convertUnit;
+
+if (useMemory) {
+  console.log('🔒 FastINTEAR: Safe mode (memory-only state)');
+} else {
+  console.log('💾 FastINTEAR: Persistent mode (localStorage)');
+  console.log('💡 Use ?memory for safe mode');
+}
 
 //# sourceMappingURL=browser.global.js.map

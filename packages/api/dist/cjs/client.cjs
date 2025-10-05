@@ -25,140 +25,114 @@ function _interopNamespace(e) {
 
 var near__namespace = /*#__PURE__*/_interopNamespace(near);
 
-/* ⋈ 🏃🏻💨 FastNEAR API - CJS (fastintear version 0.2.4) */
-/* https://www.npmjs.com/package/fastintear/v/0.2.4 */
+/* ⋈ 🏃🏻💨 FastNEAR API - CJS (fastintear version 0.3.0) */
+/* https://www.npmjs.com/package/fastintear/v/0.3.0 */
 var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
-function createNearClient(initialConfig) {
-  const clientState = {
-    accountId: null,
-    privateKey: null,
-    lastWalletId: null,
-    publicKey: null,
-    accessKeyContractId: null
+function createNearClient(config = {}) {
+  const networkId = config.networkId || state_js.DEFAULT_NETWORK_ID;
+  const networkConfig = {
+    ...state_js.NETWORKS[networkId],
+    networkId
   };
-  let clientConfig = {
-    ...state_js.NETWORKS[initialConfig?.networkId || state_js.DEFAULT_NETWORK_ID],
-    ...initialConfig
-  };
-  let clientTxHistory = {};
+  let stateManager;
+  if (config.stateManager) {
+    if ("subscribe" in config.stateManager) {
+      stateManager = config.stateManager;
+    } else {
+      stateManager = new state_js.ExternalStateManagerWrapper(config.stateManager);
+    }
+  } else if (config.isolateState) {
+    stateManager = new state_js.MemoryStateManager(networkId);
+  } else {
+    stateManager = new state_js.LocalStorageStateManager(networkId);
+  }
+  const txHistoryManager = new state_js.TxHistoryManager();
+  let currentState = null;
+  stateManager.getState().then((state) => {
+    currentState = state;
+    if (state && config.callbacks?.onStateChange) {
+      config.callbacks.onStateChange(state);
+    }
+  });
+  const unsubscribeState = stateManager.subscribe((state) => {
+    const previousState = currentState;
+    currentState = state;
+    if (config.callbacks?.onStateChange) {
+      config.callbacks.onStateChange(state);
+    }
+    if (!previousState?.accountId && state.accountId) {
+      config.callbacks?.onConnect?.({
+        accountId: state.accountId,
+        publicKey: state.publicKey || ""
+      });
+    } else if (previousState?.accountId && !state.accountId) {
+      config.callbacks?.onDisconnect?.();
+    }
+  });
   const clientAdapter = new intear_js.WalletAdapter({
-    onStateUpdate: /* @__PURE__ */ __name((state) => {
-      const { accountId, lastWalletId, privateKey } = state;
-      const newAccountId = accountId || null;
-      if (newAccountId !== clientState.accountId) {
-        clientUpdate({
-          accountId: newAccountId,
-          lastWalletId: lastWalletId || void 0,
-          ...privateKey ? { privateKey } : {}
-        });
+    onStateUpdate: /* @__PURE__ */ __name(async (adapterState) => {
+      const { accountId, lastWalletId, privateKey } = adapterState;
+      if (accountId !== currentState?.accountId) {
+        const newState = {
+          accountId: accountId || null,
+          publicKey: privateKey ? utils.publicKeyFromPrivate(privateKey) : null,
+          privateKey: privateKey || null,
+          networkId,
+          lastWalletId: lastWalletId || null,
+          accessKeyContractId: currentState?.accessKeyContractId || null
+        };
+        await stateManager.setState(newState);
       }
     }, "onStateUpdate"),
     walletUrl: state_js.WIDGET_URL
   });
-  const clientEvents = {
-    _eventListeners: {
-      account: /* @__PURE__ */ new Set(),
-      tx: /* @__PURE__ */ new Set()
-    },
-    notifyAccountListeners: /* @__PURE__ */ __name((accountId) => {
-      clientEvents._eventListeners.account.forEach((callback) => {
-        try {
-          callback(accountId);
-        } catch (e) {
-          console.error(e);
-        }
-      });
-    }, "notifyAccountListeners"),
-    notifyTxListeners: /* @__PURE__ */ __name((tx) => {
-      clientEvents._eventListeners.tx.forEach((callback) => {
-        try {
-          callback(tx);
-        } catch (e) {
-          console.error(e);
-        }
-      });
-    }, "notifyTxListeners"),
-    onAccount: /* @__PURE__ */ __name((callback) => {
-      clientEvents._eventListeners.account.add(callback);
-      return callback;
-    }, "onAccount"),
-    onTx: /* @__PURE__ */ __name((callback) => {
-      clientEvents._eventListeners.tx.add(callback);
-      return callback;
-    }, "onTx"),
-    offAccount: /* @__PURE__ */ __name((callback) => {
-      clientEvents._eventListeners.account.delete(callback);
-    }, "offAccount"),
-    offTx: /* @__PURE__ */ __name((callback) => {
-      clientEvents._eventListeners.tx.delete(callback);
-    }, "offTx")
-  };
-  const clientUpdate = /* @__PURE__ */ __name((newState) => {
-    const oldState = { ...clientState };
-    Object.assign(clientState, newState);
-    if (newState.hasOwnProperty("privateKey") && newState.privateKey !== oldState.privateKey) {
-      clientState.publicKey = newState.privateKey ? utils.publicKeyFromPrivate(newState.privateKey) : null;
-    }
-    if (newState.hasOwnProperty("accountId") && newState.accountId !== oldState.accountId) {
-      clientEvents.notifyAccountListeners(newState.accountId);
-    }
-    if (newState.hasOwnProperty("lastWalletId") && newState.lastWalletId !== oldState.lastWalletId || newState.hasOwnProperty("accountId") && newState.accountId !== oldState.accountId || newState.hasOwnProperty("privateKey") && newState.privateKey !== oldState.privateKey) {
-      clientAdapter.setState({
-        publicKey: clientState.publicKey,
-        accountId: clientState.accountId,
-        lastWalletId: clientState.lastWalletId,
-        networkId: clientConfig.networkId
-      });
-    }
-  }, "clientUpdate");
-  const clientSendRpc = /* @__PURE__ */ __name(async (method, params) => {
-    if (!clientConfig?.nodeUrl) {
-      throw new Error("fastnear: client config missing nodeUrl.");
-    }
-    const response = await fetch(clientConfig.nodeUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: `fastnear-${Date.now()}`,
-        method,
-        params
-      })
-    });
-    const result = await response.json();
-    if (result.error) {
-      throw new Error(JSON.stringify(result.error));
-    }
-    return result;
-  }, "clientSendRpc");
   return {
     // State accessors
-    accountId: /* @__PURE__ */ __name(() => clientState.accountId, "accountId"),
-    publicKey: /* @__PURE__ */ __name(() => clientState.publicKey, "publicKey"),
-    authStatus: /* @__PURE__ */ __name(() => clientState.accountId ? "SignedIn" : "SignedOut", "authStatus"),
+    accountId: /* @__PURE__ */ __name(() => currentState?.accountId || null, "accountId"),
+    publicKey: /* @__PURE__ */ __name(() => currentState?.publicKey || null, "publicKey"),
+    authStatus: /* @__PURE__ */ __name(() => currentState?.accountId ? "SignedIn" : "SignedOut", "authStatus"),
+    // State management
+    getState: /* @__PURE__ */ __name(() => stateManager.getState(), "getState"),
+    setState: /* @__PURE__ */ __name((state) => stateManager.setState(state), "setState"),
+    clearState: /* @__PURE__ */ __name(() => stateManager.clearState(), "clearState"),
+    // State restoration for external management
+    restoreFromExternalState: /* @__PURE__ */ __name(async (state) => {
+      const walletState = {
+        accountId: state.accountId,
+        publicKey: state.publicKey,
+        privateKey: state.privateKey || null,
+        networkId: state.networkId,
+        lastWalletId: null,
+        accessKeyContractId: null
+      };
+      await stateManager.setState(walletState);
+    }, "restoreFromExternalState"),
+    // Check if externally managed
+    isExternallyManaged: /* @__PURE__ */ __name(() => {
+      return stateManager instanceof state_js.ExternalStateManagerWrapper;
+    }, "isExternallyManaged"),
     // Config management
     config: /* @__PURE__ */ __name((newConfig) => {
       if (newConfig) {
-        if (newConfig.networkId && clientConfig.networkId !== newConfig.networkId) {
-          clientConfig = { ...state_js.NETWORKS[newConfig.networkId], networkId: newConfig.networkId };
-          clientUpdate({ accountId: null, privateKey: null, lastWalletId: null });
-          clientTxHistory = {};
+        Object.assign(networkConfig, newConfig);
+        if (newConfig.networkId && networkConfig.networkId !== newConfig.networkId) {
+          stateManager.clearState();
+          txHistoryManager.clearHistory();
         }
-        clientConfig = { ...clientConfig, ...newConfig };
       }
-      return clientConfig;
+      return networkConfig;
     }, "config"),
     // Selection info
     selected: /* @__PURE__ */ __name(() => {
-      const network = clientConfig.networkId;
-      const nodeUrl = clientConfig.nodeUrl;
-      const walletUrl = clientConfig.walletUrl;
-      const helperUrl = clientConfig.helperUrl;
-      const explorerUrl = clientConfig.explorerUrl;
-      const account = clientState.accountId;
-      const contract = clientState.accessKeyContractId;
-      const publicKey = clientState.publicKey;
+      const network = networkConfig.networkId;
+      const nodeUrl = networkConfig.nodeUrl;
+      const walletUrl = networkConfig.walletUrl;
+      const helperUrl = networkConfig.helperUrl;
+      const explorerUrl = networkConfig.explorerUrl;
+      const account = currentState?.accountId;
+      const contract = currentState?.accessKeyContractId;
+      const publicKey = currentState?.publicKey;
       return {
         network,
         nodeUrl,
@@ -170,116 +144,57 @@ function createNearClient(initialConfig) {
         publicKey
       };
     }, "selected"),
-    // Authentication - using the existing function but with client state
+    // Authentication methods
     requestSignIn: /* @__PURE__ */ __name(async (params = {}, callbacks = {}) => {
-      const originalState = { ...state_js._state };
-      const originalConfig = { ...state_js._config };
-      try {
-        Object.assign(state_js._state, clientState);
-        Object.assign(state_js._config, clientConfig);
-        const result = await near__namespace.requestSignIn(params, callbacks);
-        clientUpdate({
-          accountId: state_js._state.accountId,
-          privateKey: state_js._state.privateKey,
-          publicKey: state_js._state.publicKey,
-          accessKeyContractId: state_js._state.accessKeyContractId
-        });
-        return result;
-      } finally {
-        Object.assign(state_js._state, originalState);
-        Object.assign(state_js._config, originalConfig);
+      const result = await near__namespace.requestSignIn(params, callbacks);
+      if (result.accountId) {
+        const newState = {
+          accountId: result.accountId,
+          publicKey: result.publicKey,
+          privateKey: null,
+          // Will be set by adapter
+          networkId,
+          lastWalletId: null,
+          accessKeyContractId: params.contractId || null
+        };
+        await stateManager.setState(newState);
       }
+      return result;
     }, "requestSignIn"),
     signOut: /* @__PURE__ */ __name(async () => {
       await clientAdapter.signOut();
-      clientUpdate({ accountId: null, privateKey: null, accessKeyContractId: null, lastWalletId: null });
+      await stateManager.clearState();
     }, "signOut"),
-    // RPC methods - using client config
-    sendRpc: clientSendRpc,
-    // Wrap other functions to use client state/config
-    view: /* @__PURE__ */ __name((params) => {
-      const originalConfig = { ...state_js._config };
-      try {
-        Object.assign(state_js._config, clientConfig);
-        return near__namespace.view(params);
-      } finally {
-        Object.assign(state_js._config, originalConfig);
-      }
-    }, "view"),
-    queryAccount: /* @__PURE__ */ __name((params) => {
-      const originalConfig = { ...state_js._config };
-      try {
-        Object.assign(state_js._config, clientConfig);
-        return near__namespace.queryAccount(params);
-      } finally {
-        Object.assign(state_js._config, originalConfig);
-      }
-    }, "queryAccount"),
-    queryBlock: /* @__PURE__ */ __name((params) => {
-      const originalConfig = { ...state_js._config };
-      try {
-        Object.assign(state_js._config, clientConfig);
-        return near__namespace.queryBlock(params);
-      } finally {
-        Object.assign(state_js._config, originalConfig);
-      }
-    }, "queryBlock"),
-    queryAccessKey: /* @__PURE__ */ __name((params) => {
-      const originalConfig = { ...state_js._config };
-      try {
-        Object.assign(state_js._config, clientConfig);
-        return near__namespace.queryAccessKey(params);
-      } finally {
-        Object.assign(state_js._config, originalConfig);
-      }
-    }, "queryAccessKey"),
-    queryTx: /* @__PURE__ */ __name((params) => {
-      const originalConfig = { ...state_js._config };
-      try {
-        Object.assign(state_js._config, clientConfig);
-        return near__namespace.queryTx(params);
-      } finally {
-        Object.assign(state_js._config, originalConfig);
-      }
-    }, "queryTx"),
+    // RPC methods
+    sendRpc: near__namespace.sendRpc,
+    // Query methods
+    view: near__namespace.view,
+    queryAccount: near__namespace.queryAccount,
+    queryBlock: near__namespace.queryBlock,
+    queryAccessKey: near__namespace.queryAccessKey,
+    queryTx: near__namespace.queryTx,
     // Transaction methods
-    sendTx: /* @__PURE__ */ __name(async (params) => {
-      const originalState = { ...state_js._state };
-      const originalConfig = { ...state_js._config };
-      try {
-        Object.assign(state_js._state, clientState);
-        Object.assign(state_js._config, clientConfig);
-        const result = await near__namespace.sendTx(params);
-        clientUpdate({
-          accountId: state_js._state.accountId,
-          privateKey: state_js._state.privateKey,
-          publicKey: state_js._state.publicKey,
-          accessKeyContractId: state_js._state.accessKeyContractId
-        });
-        return result;
-      } finally {
-        Object.assign(state_js._state, originalState);
-        Object.assign(state_js._config, originalConfig);
-      }
-    }, "sendTx"),
-    signMessage: /* @__PURE__ */ __name(async (params) => {
-      const originalState = { ...state_js._state };
-      try {
-        Object.assign(state_js._state, clientState);
-        return await near__namespace.signMessage(params);
-      } finally {
-        Object.assign(state_js._state, originalState);
-      }
-    }, "signMessage"),
+    sendTx: near__namespace.sendTx,
+    signMessage: near__namespace.signMessage,
     // Transaction history
-    localTxHistory: /* @__PURE__ */ __name(() => clientTxHistory, "localTxHistory"),
-    // Events
-    event: clientEvents,
-    // Action helpers (these are pure functions, no state needed)
+    localTxHistory: /* @__PURE__ */ __name(() => txHistoryManager.getHistory(), "localTxHistory"),
+    // State subscription
+    subscribe: /* @__PURE__ */ __name((callback) => {
+      return stateManager.subscribe(callback);
+    }, "subscribe"),
+    // Transaction subscription
+    onTx: /* @__PURE__ */ __name((callback) => {
+      return txHistoryManager.subscribe(callback);
+    }, "onTx"),
+    // Action helpers
     actions: near__namespace.actions,
-    // Utils and exports (these are pure, no state needed)
+    // Utils and exports
     utils: near__namespace.utils,
-    exp: near__namespace.exp
+    exp: near__namespace.exp,
+    // Cleanup
+    destroy: /* @__PURE__ */ __name(() => {
+      unsubscribeState();
+    }, "destroy")
   };
 }
 __name(createNearClient, "createNearClient");
