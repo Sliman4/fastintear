@@ -4105,7 +4105,9 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
             }
             case "close": {
               window.removeEventListener("message", listener);
-              iframe.remove();
+              setTimeout(() => {
+                iframe.remove();
+              }, 1e3);
               if (event2.data.message) {
                 const errorMessage = event2.data.message || "Unknown error from wallet popup";
                 const error = {

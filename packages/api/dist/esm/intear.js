@@ -511,7 +511,9 @@ class WalletAdapter {
           }
           case "close": {
             window.removeEventListener("message", listener);
-            iframe.remove();
+            setTimeout(() => {
+              iframe.remove();
+            }, 1e3);
             if (event.data.message) {
               const errorMessage = event.data.message || "Unknown error from wallet popup";
               const error = {
