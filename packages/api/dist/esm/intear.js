@@ -513,26 +513,26 @@ class WalletAdapter {
             window.removeEventListener("message", listener);
             setTimeout(() => {
               iframe.remove();
+              if (event.data.message) {
+                const errorMessage = event.data.message || "Unknown error from wallet popup";
+                const error = {
+                  type: "wallet_error",
+                  message: errorMessage,
+                  retryable: true,
+                  suggestedAction: "contact_support",
+                  originalError: event.data,
+                  timestamp: Date.now()
+                };
+                onError?.(error);
+                reject(new IntearAdapterError(errorMessage));
+              } else if (result) {
+                resolve(result);
+              } else {
+                console.error("No result and no error");
+                reject(new IntearAdapterError("No result and no error"));
+              }
             }, 1e3);
-            if (event.data.message) {
-              const errorMessage = event.data.message || "Unknown error from wallet popup";
-              const error = {
-                type: "wallet_error",
-                message: errorMessage,
-                retryable: true,
-                suggestedAction: "contact_support",
-                originalError: event.data,
-                timestamp: Date.now()
-              };
-              onError?.(error);
-              reject(new IntearAdapterError(errorMessage));
-              break;
-            } else if (result) {
-              resolve(result);
-            } else {
-              console.error("No result and no error");
-              reject(new IntearAdapterError("No result and no error"));
-            }
+            break;
           }
         }
       }, "listener");

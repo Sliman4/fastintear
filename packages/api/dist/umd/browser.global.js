@@ -4107,26 +4107,26 @@ Caused by: ${cause instanceof Error ? cause.stack : String(cause)}`;
               window.removeEventListener("message", listener);
               setTimeout(() => {
                 iframe.remove();
+                if (event2.data.message) {
+                  const errorMessage = event2.data.message || "Unknown error from wallet popup";
+                  const error = {
+                    type: "wallet_error",
+                    message: errorMessage,
+                    retryable: true,
+                    suggestedAction: "contact_support",
+                    originalError: event2.data,
+                    timestamp: Date.now()
+                  };
+                  onError?.(error);
+                  reject(new IntearAdapterError(errorMessage));
+                } else if (result) {
+                  resolve(result);
+                } else {
+                  console.error("No result and no error");
+                  reject(new IntearAdapterError("No result and no error"));
+                }
               }, 1e3);
-              if (event2.data.message) {
-                const errorMessage = event2.data.message || "Unknown error from wallet popup";
-                const error = {
-                  type: "wallet_error",
-                  message: errorMessage,
-                  retryable: true,
-                  suggestedAction: "contact_support",
-                  originalError: event2.data,
-                  timestamp: Date.now()
-                };
-                onError?.(error);
-                reject(new IntearAdapterError(errorMessage));
-                break;
-              } else if (result) {
-                resolve(result);
-              } else {
-                console.error("No result and no error");
-                reject(new IntearAdapterError("No result and no error"));
-              }
+              break;
             }
           }
         }, "listener");
