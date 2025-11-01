@@ -750,7 +750,7 @@ export class WalletAdapter {
                 console.error("No result and no error");
                 reject(new IntearAdapterError("No result and no error"));
               }
-            }, 1000);
+            }, 100);
             break;
           }
         }

@@ -531,7 +531,7 @@ class WalletAdapter {
                 console.error("No result and no error");
                 reject(new IntearAdapterError("No result and no error"));
               }
-            }, 1e3);
+            }, 100);
             break;
           }
         }
