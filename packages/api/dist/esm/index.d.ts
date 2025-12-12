@@ -106,6 +106,23 @@ interface DeleteAccountAction {
         beneficiaryId: string;
     };
 }
+interface UseGlobalContractAction {
+    type: "UseGlobalContract";
+    params: {
+        contractIdentifier: {
+            accountId: string;
+        } | {
+            codeHash: string;
+        };
+    };
+}
+interface DeployGlobalContractAction {
+    type: "DeployGlobalContract";
+    params: {
+        code: Uint8Array;
+        deployMode: "CodeHash" | "AccountId";
+    };
+}
 interface SignedDelegateAction {
     type: "SignedDelegate";
     params: {
@@ -113,7 +130,7 @@ interface SignedDelegateAction {
         signature: string;
     };
 }
-type Action = CreateAccountAction | DeployContractAction | FunctionCallAction | TransferAction | StakeAction | AddKeyAction | DeleteKeyAction | DeleteAccountAction | SignedDelegateAction;
+type Action = CreateAccountAction | DeployContractAction | FunctionCallAction | TransferAction | StakeAction | AddKeyAction | DeleteKeyAction | DeleteAccountAction | UseGlobalContractAction | DeployGlobalContractAction | SignedDelegateAction;
 type ActionType = Action["type"];
 interface Transaction {
     signerId: string;
@@ -300,6 +317,10 @@ declare const exp: {
         AddKey: borsh.Schema;
         DeleteKey: borsh.Schema;
         DeleteAccount: borsh.Schema;
+        UseGlobalContract: borsh.Schema;
+        DeployModeCodeHash: borsh.Schema;
+        DeployModeAccountId: borsh.Schema;
+        DeployGlobalContract: borsh.Schema;
         ClassicAction: borsh.Schema;
         DelegateAction: borsh.Schema;
         SignedDelegate: borsh.Schema;
@@ -339,6 +360,17 @@ declare const actions: {
     deleteAccount: ({ beneficiaryId }: {
         beneficiaryId: string;
     }) => DeleteAccountAction;
+    useGlobalContract: ({ contractIdentifier }: {
+        contractIdentifier: {
+            accountId: string;
+        } | {
+            codeHash: string;
+        };
+    }) => UseGlobalContractAction;
+    deployGlobalContract: ({ code, deployMode }: {
+        code: Uint8Array;
+        deployMode: "CodeHash" | "AccountId";
+    }) => DeployGlobalContractAction;
     createAccount: () => CreateAccountAction;
     deployContract: ({ codeBase64 }: {
         codeBase64: string;
@@ -412,6 +444,17 @@ declare function createNearClient(initialConfig?: Partial<NetworkConfig>): {
         deleteAccount: ({ beneficiaryId }: {
             beneficiaryId: string;
         }) => DeleteAccountAction;
+        useGlobalContract: ({ contractIdentifier }: {
+            contractIdentifier: {
+                accountId: string;
+            } | {
+                codeHash: string;
+            };
+        }) => UseGlobalContractAction;
+        deployGlobalContract: ({ code, deployMode }: {
+            code: Uint8Array;
+            deployMode: "CodeHash" | "AccountId";
+        }) => DeployGlobalContractAction;
         createAccount: () => CreateAccountAction;
         deployContract: ({ codeBase64 }: {
             codeBase64: string;
@@ -443,6 +486,10 @@ declare function createNearClient(initialConfig?: Partial<NetworkConfig>): {
             AddKey: borsh.Schema;
             DeleteKey: borsh.Schema;
             DeleteAccount: borsh.Schema;
+            UseGlobalContract: borsh.Schema;
+            DeployModeCodeHash: borsh.Schema;
+            DeployModeAccountId: borsh.Schema;
+            DeployGlobalContract: borsh.Schema;
             ClassicAction: borsh.Schema;
             DelegateAction: borsh.Schema;
             SignedDelegate: borsh.Schema;
@@ -459,4 +506,4 @@ declare global {
     }
 }
 
-export { type AccessKeyView, type AccessKeyWithError, type Account, type Action, type ActionType, type AddKeyAction, type AddKeyPermission, type BlockView, type CreateAccountAction, type DeleteAccountAction, type DeleteKeyAction, type DeployContractAction, type FunctionCallAction, type LastKnownBlock, MaxBlockDelayMs, type NetworkConfig, type SignInCallbacks, type SignInParams, type SignatureResult, type SignedDelegateAction, type StakeAction, type Transaction, type TransferAction, type TxStatus, type TxStatusType, type WalletTxResult, accountId, actions, afterTxSent, authStatus, config, createNearClient, event, exp, generateTxId, getPublicKeyForContract, localTxHistory, publicKey, queryAccessKey, queryAccount, queryBlock, queryTx, requestSignIn, selected, sendRpc, sendTx, sendTxToRpc, signMessage, signOut, state, utils, view, withBlockId };
+export { type AccessKeyView, type AccessKeyWithError, type Account, type Action, type ActionType, type AddKeyAction, type AddKeyPermission, type BlockView, type CreateAccountAction, type DeleteAccountAction, type DeleteKeyAction, type DeployContractAction, type DeployGlobalContractAction, type FunctionCallAction, type LastKnownBlock, MaxBlockDelayMs, type NetworkConfig, type SignInCallbacks, type SignInParams, type SignatureResult, type SignedDelegateAction, type StakeAction, type Transaction, type TransferAction, type TxStatus, type TxStatusType, type UseGlobalContractAction, type WalletTxResult, accountId, actions, afterTxSent, authStatus, config, createNearClient, event, exp, generateTxId, getPublicKeyForContract, localTxHistory, publicKey, queryAccessKey, queryAccount, queryBlock, queryTx, requestSignIn, selected, sendRpc, sendTx, sendTxToRpc, signMessage, signOut, state, utils, view, withBlockId };

@@ -98,6 +98,33 @@ export const nearChainSchema = new (class BorshSchema {
       beneficiaryId: "string",
     },
   };
+  UseGlobalContract: Schema = {
+    struct: {
+      contractIdentifier: {
+        enum: [
+          { struct: { accountId: "string" } },
+          { struct: { codeHash: "string" } },
+        ],
+      },
+    },
+  };
+  DeployModeCodeHash: Schema = {
+    struct: {},
+  };
+  DeployModeAccountId: Schema = {
+    struct: {},
+  };
+  DeployGlobalContract: Schema = {
+    struct: {
+      code: { array: { type: "u8" } },
+      deployMode: {
+        enum: [
+          { struct: { codeHash: this.DeployModeCodeHash } },
+          { struct: { accountId: this.DeployModeAccountId } },
+        ],
+      },
+    },
+  };
   ClassicAction: Schema = {
     enum: [
       { struct: { createAccount: this.CreateAccount } },
@@ -108,6 +135,8 @@ export const nearChainSchema = new (class BorshSchema {
       { struct: { addKey: this.AddKey } },
       { struct: { deleteKey: this.DeleteKey } },
       { struct: { deleteAccount: this.DeleteAccount } },
+      { struct: { useGlobalContract: this.UseGlobalContract } },
+      { struct: { deployGlobalContract: this.DeployGlobalContract } },
     ],
   };
   DelegateAction: Schema = {
@@ -136,6 +165,8 @@ export const nearChainSchema = new (class BorshSchema {
       { struct: { addKey: this.AddKey } },
       { struct: { deleteKey: this.DeleteKey } },
       { struct: { deleteAccount: this.DeleteAccount } },
+      { struct: { useGlobalContract: this.UseGlobalContract } },
+      { struct: { deployGlobalContract: this.DeployGlobalContract } },
       { struct: { signedDelegate: this.SignedDelegate } },
     ],
   };

@@ -619,6 +619,19 @@ const actions = {
       beneficiaryId
     }
   }), "deleteAccount"),
+  useGlobalContract: /* @__PURE__ */ __name(({ contractIdentifier }) => ({
+    type: "UseGlobalContract",
+    params: {
+      contractIdentifier
+    }
+  }), "useGlobalContract"),
+  deployGlobalContract: /* @__PURE__ */ __name(({ code, deployMode }) => ({
+    type: "DeployGlobalContract",
+    params: {
+      code,
+      deployMode
+    }
+  }), "deployGlobalContract"),
   createAccount: /* @__PURE__ */ __name(() => ({
     type: "CreateAccount"
   }), "createAccount"),

@@ -3339,6 +3339,33 @@ var near = (() => {
         beneficiaryId: "string"
       }
     };
+    UseGlobalContract = {
+      struct: {
+        contractIdentifier: {
+          enum: [
+            { struct: { accountId: "string" } },
+            { struct: { codeHash: "string" } }
+          ]
+        }
+      }
+    };
+    DeployModeCodeHash = {
+      struct: {}
+    };
+    DeployModeAccountId = {
+      struct: {}
+    };
+    DeployGlobalContract = {
+      struct: {
+        code: { array: { type: "u8" } },
+        deployMode: {
+          enum: [
+            { struct: { codeHash: this.DeployModeCodeHash } },
+            { struct: { accountId: this.DeployModeAccountId } }
+          ]
+        }
+      }
+    };
     ClassicAction = {
       enum: [
         { struct: { createAccount: this.CreateAccount } },
@@ -3348,7 +3375,9 @@ var near = (() => {
         { struct: { stake: this.Stake } },
         { struct: { addKey: this.AddKey } },
         { struct: { deleteKey: this.DeleteKey } },
-        { struct: { deleteAccount: this.DeleteAccount } }
+        { struct: { deleteAccount: this.DeleteAccount } },
+        { struct: { useGlobalContract: this.UseGlobalContract } },
+        { struct: { deployGlobalContract: this.DeployGlobalContract } }
       ]
     };
     DelegateAction = {
@@ -3377,6 +3406,8 @@ var near = (() => {
         { struct: { addKey: this.AddKey } },
         { struct: { deleteKey: this.DeleteKey } },
         { struct: { deleteAccount: this.DeleteAccount } },
+        { struct: { useGlobalContract: this.UseGlobalContract } },
+        { struct: { deployGlobalContract: this.DeployGlobalContract } },
         { struct: { signedDelegate: this.SignedDelegate } }
       ]
     };
@@ -3543,6 +3574,25 @@ var near = (() => {
         return {
           deleteAccount: {
             beneficiaryId: deleteAccountAction.params.beneficiaryId
+          }
+        };
+      }
+      case "UseGlobalContract": {
+        const useGlobalContractAction = action;
+        const contractIdentifier = useGlobalContractAction.params.contractIdentifier;
+        return {
+          useGlobalContract: {
+            contractIdentifier
+          }
+        };
+      }
+      case "DeployGlobalContract": {
+        const deployGlobalContractAction = action;
+        const deployMode = deployGlobalContractAction.params.deployMode;
+        return {
+          deployGlobalContract: {
+            code: deployGlobalContractAction.params.code,
+            deployMode
           }
         };
       }
@@ -5292,6 +5342,19 @@ message: ${decodedErrMsg}`));
         beneficiaryId
       }
     }), "deleteAccount"),
+    useGlobalContract: /* @__PURE__ */ __name(({ contractIdentifier }) => ({
+      type: "UseGlobalContract",
+      params: {
+        contractIdentifier
+      }
+    }), "useGlobalContract"),
+    deployGlobalContract: /* @__PURE__ */ __name(({ code, deployMode }) => ({
+      type: "DeployGlobalContract",
+      params: {
+        code,
+        deployMode
+      }
+    }), "deployGlobalContract"),
     createAccount: /* @__PURE__ */ __name(() => ({
       type: "CreateAccount"
     }), "createAccount"),

@@ -2,7 +2,7 @@ import { serialize as borshSerialize, deserialize as borshDeserialize, Schema } 
 import { keyFromString } from "./crypto.js";
 import {base64ToBytes, fromBase58, fromBase64, toBase64} from "./misc.js";
 import { getBorshSchema } from "@fastnear/borsh-schema";
-import type { Action, AddKeyAction, CreateAccountAction, DeleteAccountAction, DeleteKeyAction, DeployContractAction, FunctionCallAction, StakeAction, TransferAction, SignedDelegateAction } from "@fastnear/api";
+import type { Action, AddKeyAction, CreateAccountAction, DeleteAccountAction, DeleteKeyAction, DeployContractAction, FunctionCallAction, StakeAction, TransferAction, SignedDelegateAction, UseGlobalContractAction, DeployGlobalContractAction } from "@fastnear/api";
 
 export interface PlainTransaction {
   signerId: string;
@@ -172,6 +172,25 @@ export function mapAction(action: Action): object {
       return {
         deleteAccount: {
           beneficiaryId: deleteAccountAction.params.beneficiaryId,
+        },
+      };
+    }
+    case "UseGlobalContract": {
+      const useGlobalContractAction = action as UseGlobalContractAction;
+      const contractIdentifier = useGlobalContractAction.params.contractIdentifier;
+      return {
+        useGlobalContract: {
+          contractIdentifier: contractIdentifier,
+        },
+      };
+    }
+    case "DeployGlobalContract": {
+      const deployGlobalContractAction = action as DeployGlobalContractAction;
+      const deployMode = deployGlobalContractAction.params.deployMode;
+      return {
+        deployGlobalContract: {
+          code: deployGlobalContractAction.params.code,
+          deployMode: deployMode,
         },
       };
     }

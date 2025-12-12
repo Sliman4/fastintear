@@ -43,6 +43,12 @@ export const mapActionForWalletSelector = action => {
     case "DeleteAccount": {
       return { type, params: { beneficiaryId: action.beneficiaryId } };
     }
+    case "UseGlobalContract": {
+      return { type, params: { contractIdentifier: action.contractIdentifier } };
+    }
+    case "DeployGlobalContract": {
+      return { type, params: { code: action.code, deployMode: action.deployMode } };
+    }
     default:
       throw new Error("Invalid action type");
   }

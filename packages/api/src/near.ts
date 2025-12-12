@@ -95,6 +95,22 @@ export interface DeleteAccountAction {
   };
 }
 
+export interface UseGlobalContractAction {
+  type: "UseGlobalContract";
+  params: {
+    contractIdentifier: {
+      accountId: string
+    } | {
+      codeHash: string
+    };
+  };
+}
+
+export interface DeployGlobalContractAction {
+  type: "DeployGlobalContract";
+  params: { code: Uint8Array; deployMode: "CodeHash" | "AccountId" };
+}
+
 export interface SignedDelegateAction {
   type: "SignedDelegate";
   params: {
@@ -112,6 +128,8 @@ export type Action =
   | AddKeyAction
   | DeleteKeyAction
   | DeleteAccountAction
+  | UseGlobalContractAction
+  | DeployGlobalContractAction
   | SignedDelegateAction;
 
 export type ActionType = Action["type"];
@@ -995,6 +1013,26 @@ export const actions = {
     type: "DeleteAccount",
     params: {
       beneficiaryId,
+    },
+  }),
+
+  useGlobalContract: ({ contractIdentifier }: { 
+    contractIdentifier: { accountId: string } | { codeHash: string } 
+  }): UseGlobalContractAction => ({
+    type: "UseGlobalContract",
+    params: {
+      contractIdentifier,
+    },
+  }),
+
+  deployGlobalContract: ({ code, deployMode }: { 
+    code: Uint8Array; 
+    deployMode: "CodeHash" | "AccountId" 
+  }): DeployGlobalContractAction => ({
+    type: "DeployGlobalContract",
+    params: {
+      code,
+      deployMode,
     },
   }),
 
